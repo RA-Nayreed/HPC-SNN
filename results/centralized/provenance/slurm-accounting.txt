@@ -1,0 +1,20 @@
+             JobID          State ExitCode    Elapsed               Start                 End                                                    AllocTRES 
+------------------ -------------- -------- ---------- ------------------- ------------------- ------------------------------------------------------------ 
+          186611_0      COMPLETED      0:0   00:08:49 2026-07-15T22:43:55 2026-07-15T22:52:44        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_1      COMPLETED      0:0   00:05:20 2026-07-15T22:43:55 2026-07-15T22:49:15        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_2      COMPLETED      0:0   00:05:31 2026-07-15T22:43:55 2026-07-15T22:49:26        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_3      COMPLETED      0:0   00:14:16 2026-07-15T22:43:55 2026-07-15T22:58:11        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_4      COMPLETED      0:0   00:13:35 2026-07-15T22:49:16 2026-07-15T23:02:51        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_5      COMPLETED      0:0   00:14:05 2026-07-15T22:49:29 2026-07-15T23:03:34        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_6      COMPLETED      0:0   00:05:16 2026-07-15T22:52:45 2026-07-15T22:58:01        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_7      COMPLETED      0:0   00:06:11 2026-07-15T22:57:21 2026-07-15T23:03:32        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_8      COMPLETED      0:0   00:07:03 2026-07-15T22:57:21 2026-07-15T23:04:24        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+          186611_9      COMPLETED      0:0   00:13:20 2026-07-15T22:58:03 2026-07-15T23:11:23        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+         186611_10      COMPLETED      0:0   00:14:15 2026-07-15T22:58:12 2026-07-15T23:12:27        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+         186611_11      COMPLETED      0:0   00:13:39 2026-07-15T23:12:28 2026-07-15T23:26:07        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+         186611_12      COMPLETED      0:0   00:53:59 2026-07-15T23:26:08 2026-07-16T00:20:07        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+         186611_13      COMPLETED      0:0   00:29:26 2026-07-15T23:41:29 2026-07-16T00:10:55        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+         186611_14      COMPLETED      0:0   00:52:22 2026-07-15T23:41:29 2026-07-16T00:33:51        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+         186611_15      COMPLETED      0:0   00:54:22 2026-07-15T23:41:29 2026-07-16T00:35:51        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+         186611_16      COMPLETED      0:0   00:42:40 2026-07-15T23:41:29 2026-07-16T00:24:09        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 
+         186611_17      COMPLETED      0:0   00:52:30 2026-07-15T23:41:29 2026-07-16T00:33:59        billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1 

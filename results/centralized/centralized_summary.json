@@ -1,0 +1,675 @@
+{
+  "errors": [],
+  "expected_task_count": 18,
+  "experiments": [
+    {
+      "attention_variant": "none",
+      "completed": true,
+      "completed_seed_count": 3,
+      "config_name": "shd_lif_independent_evaluation",
+      "dataset": "shd",
+      "experiment": "shd_lif_independent_evaluation",
+      "layer_spike_rates": {
+        "layer1": {
+          "maximum": 0.14782944255616326,
+          "mean": 0.1440476824972701,
+          "minimum": 0.14155044178992507,
+          "sample_standard_deviation": 0.0033307589418901536
+        },
+        "layer2": {
+          "maximum": 0.050138300949883564,
+          "mean": 0.04798550610798104,
+          "minimum": 0.04574435325293885,
+          "sample_standard_deviation": 0.002198306039826104
+        }
+      },
+      "metrics": {
+        "best_validation_accuracy": {
+          "maximum": 0.9693627450980392,
+          "mean": 0.9644607843137255,
+          "minimum": 0.9571078431372549,
+          "sample_standard_deviation": 0.006484684585942601
+        },
+        "official_test_accuracy": {
+          "maximum": 0.7848939929328622,
+          "mean": 0.7636925795053003,
+          "minimum": 0.7398409893992933,
+          "sample_standard_deviation": 0.022643119466389208
+        },
+        "peak_cuda_memory_bytes": {
+          "maximum": 431863296.0,
+          "mean": 431251626.6666667,
+          "minimum": 430945792.0,
+          "sample_standard_deviation": 529721.1813825584
+        },
+        "runtime_seconds": {
+          "maximum": 510.77025924497866,
+          "mean": 375.5303456313074,
+          "minimum": 302.5793223247747,
+          "sample_standard_deviation": 117.24246647737817
+        }
+      },
+      "model_name": "lif_2layer",
+      "parameter_count": 107028,
+      "protocol": "independent_evaluation",
+      "reference_test_accuracy": null,
+      "reproduction_delta": null,
+      "required_seeds": [
+        7,
+        17,
+        27
+      ],
+      "runs": [
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.9669117647058824,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.14155044178992507,
+            "layer2": 0.050138300949883564
+          },
+          "official_test_accuracy": 0.7663427561837456,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 430945792.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_lif_independent_evaluation-seed7-e5418f68",
+          "runtime_seconds": 510.77025924497866,
+          "scientific_status": "not_claimed",
+          "seed": 7
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.9693627450980392,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.14782944255616326,
+            "layer2": 0.048073864121120705
+          },
+          "official_test_accuracy": 0.7848939929328622,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 430945792.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_lif_independent_evaluation-seed17-dee0b1d3",
+          "runtime_seconds": 302.5793223247747,
+          "scientific_status": "not_claimed",
+          "seed": 17
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.9571078431372549,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.14276316314572193,
+            "layer2": 0.04574435325293885
+          },
+          "official_test_accuracy": 0.7398409893992933,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 431863296.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_lif_independent_evaluation-seed27-97815e10",
+          "runtime_seconds": 313.2414553241688,
+          "scientific_status": "not_claimed",
+          "seed": 27
+        }
+      ],
+      "scientific_status": "not_claimed",
+      "tolerance": null
+    },
+    {
+      "attention_variant": "none",
+      "completed": true,
+      "completed_seed_count": 3,
+      "config_name": "shd_dcls_published_protocol",
+      "dataset": "shd",
+      "experiment": "shd_dcls_published_protocol",
+      "layer_spike_rates": {
+        "layer1": {
+          "maximum": 0.11641666039489082,
+          "mean": 0.11416751794720235,
+          "minimum": 0.10978872896214319,
+          "sample_standard_deviation": 0.003792613155846805
+        },
+        "layer2": {
+          "maximum": 0.09941548001769289,
+          "mean": 0.09550939772730738,
+          "minimum": 0.08868945017250479,
+          "sample_standard_deviation": 0.005927047084708264
+        }
+      },
+      "metrics": {
+        "best_validation_accuracy": {
+          "maximum": 0.916077738515901,
+          "mean": 0.9137220259128387,
+          "minimum": 0.9112190812720848,
+          "sample_standard_deviation": 0.0024326725032182066
+        },
+        "official_test_accuracy": {
+          "maximum": 0.916077738515901,
+          "mean": 0.9137220259128387,
+          "minimum": 0.9112190812720848,
+          "sample_standard_deviation": 0.0024326725032182066
+        },
+        "peak_cuda_memory_bytes": {
+          "maximum": 534188032.0,
+          "mean": 533883562.6666667,
+          "minimum": 533652992.0,
+          "sample_standard_deviation": 275068.5552754683
+        },
+        "runtime_seconds": {
+          "maximum": 838.0439650670742,
+          "mean": 819.7753291152767,
+          "minimum": 795.8739693782991,
+          "sample_standard_deviation": 21.641922674012303
+        }
+      },
+      "model_name": "dcls_shd",
+      "parameter_count": 310272,
+      "protocol": "published_protocol",
+      "reference_test_accuracy": null,
+      "reproduction_delta": null,
+      "required_seeds": [
+        7,
+        17,
+        27
+      ],
+      "runs": [
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.9138692579505301,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.10978872896214319,
+            "layer2": 0.08868945017250479
+          },
+          "official_test_accuracy": 0.9138692579505301,
+          "parameter_count": 310272,
+          "peak_cuda_memory_bytes": 533652992.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_dcls_published_protocol-seed7-03006c37",
+          "runtime_seconds": 838.0439650670742,
+          "scientific_status": "not_claimed",
+          "seed": 7
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.916077738515901,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.11629716448457304,
+            "layer2": 0.09842326299172445
+          },
+          "official_test_accuracy": 0.916077738515901,
+          "parameter_count": 310272,
+          "peak_cuda_memory_bytes": 534188032.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_dcls_published_protocol-seed17-3076cceb",
+          "runtime_seconds": 795.8739693782991,
+          "scientific_status": "not_claimed",
+          "seed": 17
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.9112190812720848,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.11641666039489082,
+            "layer2": 0.09941548001769289
+          },
+          "official_test_accuracy": 0.9112190812720848,
+          "parameter_count": 310272,
+          "peak_cuda_memory_bytes": 533809664.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_dcls_published_protocol-seed27-d452a40c",
+          "runtime_seconds": 825.4080529004568,
+          "scientific_status": "not_claimed",
+          "seed": 27
+        }
+      ],
+      "scientific_status": "not_claimed",
+      "tolerance": null
+    },
+    {
+      "attention_variant": "equation",
+      "completed": true,
+      "completed_seed_count": 3,
+      "config_name": "shd_pfa_equation_independent_evaluation",
+      "dataset": "shd",
+      "experiment": "shd_pfa_equation_independent_evaluation",
+      "layer_spike_rates": {
+        "layer1": {
+          "maximum": 0.1838928231648827,
+          "mean": 0.17629950114544782,
+          "minimum": 0.17199877991760734,
+          "sample_standard_deviation": 0.006595299930376187
+        },
+        "layer2": {
+          "maximum": 0.046682355787937925,
+          "mean": 0.04490723695728519,
+          "minimum": 0.043758576210649214,
+          "sample_standard_deviation": 0.0015593136478640533
+        }
+      },
+      "metrics": {
+        "best_validation_accuracy": {
+          "maximum": 0.9730392156862745,
+          "mean": 0.9665032679738562,
+          "minimum": 0.9632352941176471,
+          "sample_standard_deviation": 0.005660296756761017
+        },
+        "official_test_accuracy": {
+          "maximum": 0.806095406360424,
+          "mean": 0.7843050647820966,
+          "minimum": 0.7698763250883393,
+          "sample_standard_deviation": 0.019198967388342772
+        },
+        "peak_cuda_memory_bytes": {
+          "maximum": 934655488.0,
+          "mean": 934043818.6666666,
+          "minimum": 933737984.0,
+          "sample_standard_deviation": 529721.1813825584
+        },
+        "runtime_seconds": {
+          "maximum": 406.1795164879295,
+          "mean": 353.11631581530673,
+          "minimum": 298.7660846459912,
+          "sample_standard_deviation": 53.718280600185295
+        }
+      },
+      "model_name": "lif_2layer",
+      "parameter_count": 107028,
+      "protocol": "independent_evaluation",
+      "reference_test_accuracy": null,
+      "reproduction_delta": null,
+      "required_seeds": [
+        7,
+        17,
+        27
+      ],
+      "runs": [
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.9632352941176471,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.17300690035385344,
+            "layer2": 0.04428077887326843
+          },
+          "official_test_accuracy": 0.7698763250883393,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 933737984.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_pfa_equation_independent_evaluation-seed7-83ba357c",
+          "runtime_seconds": 298.7660846459912,
+          "scientific_status": "not_claimed",
+          "seed": 7
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.9730392156862745,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.1838928231648827,
+            "layer2": 0.043758576210649214
+          },
+          "official_test_accuracy": 0.7769434628975265,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 933737984.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_pfa_equation_independent_evaluation-seed17-21e42218",
+          "runtime_seconds": 354.4033463119995,
+          "scientific_status": "not_claimed",
+          "seed": 17
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.9632352941176471,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.17199877991760734,
+            "layer2": 0.046682355787937925
+          },
+          "official_test_accuracy": 0.806095406360424,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 934655488.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_pfa_equation_independent_evaluation-seed27-4319f31b",
+          "runtime_seconds": 406.1795164879295,
+          "scientific_status": "not_claimed",
+          "seed": 27
+        }
+      ],
+      "scientific_status": "not_claimed",
+      "tolerance": null
+    },
+    {
+      "attention_variant": "public_behavior",
+      "completed": true,
+      "completed_seed_count": 3,
+      "config_name": "shd_pfa_public_published_protocol",
+      "dataset": "shd",
+      "experiment": "shd_pfa_public_published_protocol",
+      "layer_spike_rates": {
+        "layer1": {
+          "maximum": 0.1774079213567725,
+          "mean": 0.1734954210729189,
+          "minimum": 0.16737320027343786,
+          "sample_standard_deviation": 0.00536992135631136
+        },
+        "layer2": {
+          "maximum": 0.04720682141947553,
+          "mean": 0.046764537378274955,
+          "minimum": 0.04641834285332507,
+          "sample_standard_deviation": 0.00040292618265587796
+        }
+      },
+      "metrics": {
+        "best_validation_accuracy": {
+          "maximum": 0.8409893992932862,
+          "mean": 0.8402532391048292,
+          "minimum": 0.8392226148409894,
+          "sample_standard_deviation": 0.0009194637806829274
+        },
+        "official_test_accuracy": {
+          "maximum": 0.8409893992932862,
+          "mean": 0.8402532391048292,
+          "minimum": 0.8392226148409894,
+          "sample_standard_deviation": 0.0009194637806829274
+        },
+        "peak_cuda_memory_bytes": {
+          "maximum": 934479360.0,
+          "mean": 933985109.3333334,
+          "minimum": 933737984.0,
+          "sample_standard_deviation": 428033.633170728
+        },
+        "runtime_seconds": {
+          "maximum": 835.3524662739947,
+          "mean": 805.8770408883478,
+          "minimum": 782.1700499608123,
+          "sample_standard_deviation": 27.0563944068737
+        }
+      },
+      "model_name": "lif_2layer",
+      "parameter_count": 107028,
+      "protocol": "published_protocol",
+      "reference_test_accuracy": null,
+      "reproduction_delta": null,
+      "required_seeds": [
+        7,
+        17,
+        27
+      ],
+      "runs": [
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.8392226148409894,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.16737320027343786,
+            "layer2": 0.04720682141947553
+          },
+          "official_test_accuracy": 0.8392226148409894,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 933737984.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_pfa_public_published_protocol-seed7-097715b5",
+          "runtime_seconds": 782.1700499608123,
+          "scientific_status": "not_claimed",
+          "seed": 7
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.8409893992932862,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.1774079213567725,
+            "layer2": 0.046668447862024266
+          },
+          "official_test_accuracy": 0.8409893992932862,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 933737984.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_pfa_public_published_protocol-seed17-440d24ec",
+          "runtime_seconds": 835.3524662739947,
+          "scientific_status": "not_claimed",
+          "seed": 17
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.840547703180212,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.17570514158854636,
+            "layer2": 0.04641834285332507
+          },
+          "official_test_accuracy": 0.840547703180212,
+          "parameter_count": 107028,
+          "peak_cuda_memory_bytes": 934479360.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/shd_pfa_public_published_protocol-seed27-da0f99cb",
+          "runtime_seconds": 800.1086064302363,
+          "scientific_status": "not_claimed",
+          "seed": 27
+        }
+      ],
+      "scientific_status": "not_claimed",
+      "tolerance": null
+    },
+    {
+      "attention_variant": "none",
+      "completed": true,
+      "completed_seed_count": 3,
+      "config_name": "ssc_lif_128_independent_evaluation",
+      "dataset": "ssc",
+      "experiment": "ssc_lif_128_independent_evaluation",
+      "layer_spike_rates": {
+        "layer1": {
+          "maximum": 0.1562155101802885,
+          "mean": 0.1334685715754494,
+          "minimum": 0.1073486317645404,
+          "sample_standard_deviation": 0.02460743392507615
+        },
+        "layer2": {
+          "maximum": 0.0194845673264477,
+          "mean": 0.018667867959268756,
+          "minimum": 0.018132476934360937,
+          "sample_standard_deviation": 0.0007186013461348583
+        }
+      },
+      "metrics": {
+        "best_validation_accuracy": {
+          "maximum": 0.5731890592125037,
+          "mean": 0.5704839194469492,
+          "minimum": 0.5690812543833283,
+          "sample_standard_deviation": 0.002343255297771046
+        },
+        "official_test_accuracy": {
+          "maximum": 0.5512707290746738,
+          "mean": 0.5489811271383247,
+          "minimum": 0.5477872632715141,
+          "sample_standard_deviation": 0.0019834603445047254
+        },
+        "peak_cuda_memory_bytes": {
+          "maximum": 208247808.0,
+          "mean": 208247808.0,
+          "minimum": 208247808.0,
+          "sample_standard_deviation": 0.0
+        },
+        "runtime_seconds": {
+          "maximum": 3196.1981674559647,
+          "mean": 2672.817210509655,
+          "minimum": 1723.4981510048383,
+          "sample_standard_deviation": 823.5768239952744
+        }
+      },
+      "model_name": "lif_2layer_128",
+      "parameter_count": 39075,
+      "protocol": "independent_evaluation",
+      "reference_test_accuracy": null,
+      "reproduction_delta": null,
+      "required_seeds": [
+        7,
+        17,
+        27
+      ],
+      "runs": [
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.5731890592125037,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.13684157278151923,
+            "layer2": 0.0194845673264477
+          },
+          "official_test_accuracy": 0.5512707290746738,
+          "parameter_count": 39075,
+          "peak_cuda_memory_bytes": 208247808.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/ssc_lif_128_independent_evaluation-seed7-256405cc",
+          "runtime_seconds": 3196.1981674559647,
+          "scientific_status": "not_claimed",
+          "seed": 7
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.5690812543833283,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.1073486317645404,
+            "layer2": 0.01838655961699763
+          },
+          "official_test_accuracy": 0.5477872632715141,
+          "parameter_count": 39075,
+          "peak_cuda_memory_bytes": 208247808.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/ssc_lif_128_independent_evaluation-seed17-068284d7",
+          "runtime_seconds": 1723.4981510048383,
+          "scientific_status": "not_claimed",
+          "seed": 17
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.5691814447450155,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.1562155101802885,
+            "layer2": 0.018132476934360937
+          },
+          "official_test_accuracy": 0.5478853890687861,
+          "parameter_count": 39075,
+          "peak_cuda_memory_bytes": 208247808.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/ssc_lif_128_independent_evaluation-seed27-3fcdc765",
+          "runtime_seconds": 3098.7553130681626,
+          "scientific_status": "not_claimed",
+          "seed": 27
+        }
+      ],
+      "scientific_status": "not_claimed",
+      "tolerance": null
+    },
+    {
+      "attention_variant": "equation",
+      "completed": true,
+      "completed_seed_count": 3,
+      "config_name": "ssc_pfa_equation_128_independent_evaluation",
+      "dataset": "ssc",
+      "experiment": "ssc_pfa_equation_128_independent_evaluation",
+      "layer_spike_rates": {
+        "layer1": {
+          "maximum": 0.13494990005648624,
+          "mean": 0.1306008131186438,
+          "minimum": 0.12512520418864548,
+          "sample_standard_deviation": 0.0050082882378114
+        },
+        "layer2": {
+          "maximum": 0.018575491620652047,
+          "mean": 0.018237179766097726,
+          "minimum": 0.01806750193988134,
+          "sample_standard_deviation": 0.0002929871252759932
+        }
+      },
+      "metrics": {
+        "best_validation_accuracy": {
+          "maximum": 0.580603145977357,
+          "mean": 0.5792338777009651,
+          "minimum": 0.5776976254884281,
+          "sample_standard_deviation": 0.0014599400857892527
+        },
+        "official_test_accuracy": {
+          "maximum": 0.5612304974977922,
+          "mean": 0.5578124488928139,
+          "minimum": 0.5512216661760376,
+          "sample_standard_deviation": 0.005709103030683423
+        },
+        "peak_cuda_memory_bytes": {
+          "maximum": 391748608.0,
+          "mean": 391748608.0,
+          "minimum": 391748608.0,
+          "sample_standard_deviation": 0.0
+        },
+        "runtime_seconds": {
+          "maximum": 3218.8714426808874,
+          "mean": 2947.063280387316,
+          "minimum": 2515.381460809149,
+          "sample_standard_deviation": 378.0135293460262
+        }
+      },
+      "model_name": "lif_2layer_128",
+      "parameter_count": 39075,
+      "protocol": "independent_evaluation",
+      "reference_test_accuracy": null,
+      "reproduction_delta": null,
+      "required_seeds": [
+        7,
+        17,
+        27
+      ],
+      "runs": [
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.5776976254884281,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.1317273351107997,
+            "layer2": 0.018068545737759793
+          },
+          "official_test_accuracy": 0.5512216661760376,
+          "parameter_count": 39075,
+          "peak_cuda_memory_bytes": 391748608.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/ssc_pfa_equation_128_independent_evaluation-seed7-409766f2",
+          "runtime_seconds": 3218.8714426808874,
+          "scientific_status": "not_claimed",
+          "seed": 7
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.5794008616371105,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.12512520418864548,
+            "layer2": 0.01806750193988134
+          },
+          "official_test_accuracy": 0.5612304974977922,
+          "parameter_count": 39075,
+          "peak_cuda_memory_bytes": 391748608.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/ssc_pfa_equation_128_independent_evaluation-seed17-c6158fe1",
+          "runtime_seconds": 2515.381460809149,
+          "scientific_status": "not_claimed",
+          "seed": 17
+        },
+        {
+          "absolute_accuracy_difference": null,
+          "best_validation_accuracy": 0.580603145977357,
+          "git_commit": "44c7e4aa52a8dd6103256d17da3b79d2aa075056",
+          "layer_spike_rates": {
+            "layer1": 0.13494990005648624,
+            "layer2": 0.018575491620652047
+          },
+          "official_test_accuracy": 0.5609851830046119,
+          "parameter_count": 39075,
+          "peak_cuda_memory_bytes": 391748608.0,
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized/ssc_pfa_equation_128_independent_evaluation-seed27-bd20c9c6",
+          "runtime_seconds": 3106.9369376719114,
+          "scientific_status": "not_claimed",
+          "seed": 27
+        }
+      ],
+      "scientific_status": "not_claimed",
+      "tolerance": null
+    }
+  ],
+  "manifest": "/projappl/project_2015302/HPC-SNN/experiments/centralized/manifest.yaml",
+  "required_seeds": [
+    7,
+    17,
+    27
+  ],
+  "runs_root": "/scratch/project_2015302/rnayreed/hpc-snn/runs/centralized",
+  "schema_version": 1,
+  "valid": true
+}
