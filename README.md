@@ -75,3 +75,41 @@ fedapfa-summarize-centralized \
 ~~~
 
 Execution completion requires a valid terminal condition, finite metrics, both checkpoints, complete-dataset use without batch limits, official test evaluation, the expected model class, and nonempty metrics and logs. Scientific reproduction is separate: it requires a verified reference accuracy and tolerance. Current literature targets remain null because no value is verifiable from repository records, so completed runs report `scientific_status: not_claimed` rather than a reproduction pass.
+
+## Federated SHD LIF reference
+
+The federated reference uses SHD so that FedAvg correctness can be assessed against the completed centralized SHD LIF evidence without also changing the dataset or model family. It uses the ordinary 256/256 LIF network before attention mechanisms; FedAvg is reference infrastructure, not a novelty claim. SSC remains necessary for broader generalization and resource evidence but is outside this two-treatment matrix.
+
+| Experiment | Clients | Dirichlet alpha | Participation | Seeds |
+|---|---:|---:|---:|---|
+| SHD LIF FedAvg | 20 | 0.5 | 50% (10 clients per round) | 7, 17, 27 |
+| SHD LIF FedAvg | 20 | 0.5 | 25% (5 clients per round) | 7, 17, 27 |
+
+For each seed, the established stratified SHD validation split is removed before client partitioning. The remaining training indices are assigned exactly once by deterministic label-wise Dirichlet sampling. Both participation treatments reuse the same split, partition, initial global parameters, and round-specific client permutation; the five-client selection is the prefix of the ten-client selection. Validation selects the global checkpoint, and the official test dataset is constructed only after all 100 communication rounds.
+
+FedAvg uses sample-count weighting, `w_next = sum(n_k * w_k) / sum(n_k)`. Each selected client receives an isolated global-model copy and a newly created Adam optimizer. Optimizer state stays local and is neither retained nor aggregated. Logical communication counts one tensor-model download and upload per selected client; it excludes optimizer state, dataset transfer, checkpoint I/O, and telemetry and is not measured network traffic.
+
+After review, submit the six independent executions with:
+
+~~~bash
+bash scripts/slurm/submit_roihu_federated.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
+  --max-parallel 1
+~~~
+
+Monitor the returned job ID:
+
+~~~bash
+squeue --job <JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+~~~
+
+Aggregate only after all six executions pass completion checks:
+
+~~~bash
+fedapfa-summarize-federated \
+  --manifest experiments/federated_baselines/manifest.yaml \
+  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/federated" \
+  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/federated"
+~~~
+
+No federated scientific accuracy is recorded yet. The reference becomes experimentally finished only after all six Roihu executions complete, their acceptance records pass, paired identities match, and the generated aggregation is valid.

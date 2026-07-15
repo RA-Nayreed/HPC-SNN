@@ -41,3 +41,32 @@ def test_centralized_shell_scripts_parse():
 
     for name in ("roihu_centralized_array.sbatch", "submit_roihu_centralized.sh"):
         subprocess.run(["bash", "-n", str(ROOT / "scripts/slurm" / name)], check=True)
+
+
+def test_federated_array_uses_one_gh200_and_job_level_telemetry():
+    text = (ROOT / "scripts/slurm/fedavg_single_gpu.sbatch").read_text()
+    assert "#SBATCH --partition=gpumedium" in text
+    assert "#SBATCH --gres=gpu:gh200:1" in text
+    assert "#SBATCH --ntasks=1" in text
+    assert "python-pytorch/2.10" in text
+    assert "/projappl/${CSC_PROJECT}/${USER}/hpc-snn-venv" in text
+    assert "torch.cuda.is_available()" in text
+    assert "nvidia-smi" in text and "sampling_interval_seconds=2" in text
+    assert "--resume-auto" in text
+    assert "/runs/federated" in text and "/telemetry/federated" in text
+
+
+def test_federated_submission_defaults_to_one_and_limits_six_tasks():
+    text = (ROOT / "scripts/slurm/submit_roihu_federated.sh").read_text()
+    assert "max_parallel=1" in text
+    assert '[[ "${max_parallel}" =~ ^[1-6]$ ]]' in text
+    assert '[[ "${task_count}" == "6" ]]' in text
+    assert "/slurm-logs/federated" in text
+    assert "Submitted job ID:" in text
+
+
+def test_federated_shell_scripts_parse():
+    import subprocess
+
+    for name in ("fedavg_single_gpu.sbatch", "submit_roihu_federated.sh"):
+        subprocess.run(["bash", "-n", str(ROOT / "scripts/slurm" / name)], check=True)

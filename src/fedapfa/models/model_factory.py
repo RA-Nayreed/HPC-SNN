@@ -26,4 +26,4 @@ def make_model(config):
 
 
 def make_audio_snn(dataset, attention="none", lambda_=1e-2, dropout=0.4):
-    raise TypeError("make_audio_snn legacy API removed; pass a fully resolved config to make_model")
+    raise TypeError("make_audio_snn legacy API removed; pass a completely resolved config to make_model")

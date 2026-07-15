@@ -40,6 +40,12 @@ def _load(path: Path, stack: tuple[Path, ...]) -> dict[str, Any]:
 
 
 def load_config(path: str | Path) -> dict[str, Any]:
-    config = _load(Path(path), ())
+    config = load_resolved_config(path)
     validate_config(config)
     return config
+
+
+def load_resolved_config(path: str | Path) -> dict[str, Any]:
+    """Resolve includes without selecting an execution-specific validator."""
+
+    return _load(Path(path), ())

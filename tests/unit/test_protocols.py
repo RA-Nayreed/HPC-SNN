@@ -23,7 +23,7 @@ def _paths(config, tmp_path):
     return config
 
 
-def test_tiny_protocol_reuses_subset_and_never_opens_test(tmp_path):
+def test_memorization_protocol_reuses_subset_and_never_opens_test(tmp_path):
     config = _paths(load_config("tests/data/configurations/centralized/shd_memorization_validation.yaml"), tmp_path)
     bundle = prepare_datasets(config)
     assert bundle.train is bundle.validation

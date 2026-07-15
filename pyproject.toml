@@ -21,8 +21,10 @@ fedapfa-download-data = "fedapfa.cli.download_dataset:main"
 fedapfa-inspect-data = "fedapfa.cli.inspect_dataset:main"
 fedapfa-validate-config = "fedapfa.cli.validate_run:main"
 fedapfa-train-centralized = "fedapfa.cli.train_centralized:main"
+fedapfa-train-federated = "fedapfa.cli.train_federated:main"
 fedapfa-evaluate-checkpoint = "fedapfa.cli.evaluate_checkpoint:main"
 fedapfa-summarize-centralized = "fedapfa.cli.summarize_centralized:main"
+fedapfa-summarize-federated = "fedapfa.cli.summarize_federated:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fedapfa"]
@@ -35,7 +37,7 @@ markers = ["dcls: requires the optional dcls package", "cuda: requires one CUDA 
 [tool.ruff]
 line-length = 120
 target-version = "py310"
-exclude = ["analysis", "src/fedapfa/federated", "src/fedapfa/distributed", "src/fedapfa/scheduling", "tests/unit/federated", "tests/unit/distributed", "tests/unit/scheduling"]
+exclude = ["analysis", "src/fedapfa/distributed", "src/fedapfa/scheduling", "tests/unit/distributed", "tests/unit/scheduling"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]

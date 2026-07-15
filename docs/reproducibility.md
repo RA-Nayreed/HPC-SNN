@@ -10,7 +10,7 @@ A new run records `resolved_config.yaml`, `command.txt`, `command_history.jsonl`
 
 `fedapfa-train-centralized --resume-auto` resolves the run directory before model or dataset construction:
 
-- completed `acceptance.json`: record the retry command and event, then exit successfully without training;
+- completed `acceptance.json`: record the retry command and event, then exit with status zero without training;
 - compatible incomplete run with `checkpoints/last.pt`: record the resume event and continue;
 - no run directory: create a new non-overwriting run;
 - incompatible resolved configuration or Git metadata: refuse;
@@ -45,3 +45,27 @@ The scientific status is `not_claimed` for every experiment because the referenc
 Array concurrency changed from four simultaneous tasks to one and then six. This does not invalidate accuracy aggregation, but runtime values must not be interpreted as a controlled scaling comparison.
 
 The retained scheduler evidence does not contain historical GPU utilization, GPU-memory telemetry, or GPU energy measurements. Peak CUDA memory in the aggregation is a framework-recorded allocation metric, not GPU utilization. Allocated GPU-hours and billing units are operational accounting and must not be interpreted as energy consumption.
+
+## Federated execution identity
+
+The federated experiment ID uses the same canonical configuration hashing as centralized execution and includes the scientific seed. Operational output paths do not alter identity. The resolved record additionally stores independent numeric seeds for split construction, client partitioning, global model initialization, client selection, client training, validation, and final test evaluation.
+
+Paired participation treatments verify identical split, partition, and model-initialization identities for each seed. Client selection uses an isolated generator whose state is checkpointed after every round. Per-client training seeds are derived with SHA-256 from the experiment seed, stream identity, round, and client identifier; Python's process-randomized hashing is not used.
+
+## Federated records and resumption
+
+Each run contains `split.json`, `partition.json`, `resolved_seeds.json`, `model_initialization.json`, `client_metrics.jsonl`, `round_metrics.jsonl`, `official_test_metrics.json`, `final_metrics.json`, and `acceptance.json`, together with the shared resolved configuration, command history, environment, Git provenance, logs, and checkpoints.
+
+`checkpoints/last.pt` is written atomically after every completed round. It contains the global model, next round, best validation score and round, selection-generator state, global Python, NumPy, CPU Torch, and CUDA random states, scientific identities, Git commit, cumulative communication totals, and completed client and round records. `checkpoints/best.pt` is replaced atomically when validation accuracy improves.
+
+`fedapfa-train-federated --resume-auto` uses the shared run-directory compatibility checks. It skips a completed compatible execution, resumes an incomplete compatible execution from `checkpoints/last.pt`, rejects configuration or Git mismatches, and never overwrites a completed record. Federated checkpoint loading separately rejects split, partition, model-initialization, model-class, configuration, or Git incompatibility. A durable official-test record prevents a resumed process from evaluating that split a second time.
+
+## Federated completion and aggregation
+
+Completion requires every configured round, valid client selections and aggregation weights, complete partition integrity, finite records, nonempty best and last checkpoints, nonempty client and round logs, exactly one official-test evaluation after model selection, Git provenance, all scientific identities, and consistent logical communication totals. Accuracy does not determine completion. With no verified FedAvg literature target, scientific status remains `not_claimed`; the centralized SHD LIF result is context rather than a reproduction threshold.
+
+`fedapfa-summarize-federated` requires the two manifest treatments and seeds 7, 17, and 27. It rejects missing, duplicate, incompatible, or incomplete executions; preserves the participation rows; checks paired identities; calculates aggregate statistics and per-seed 50%-minus-25% differences; and reports the centralized-to-federated accuracy gap as context. Its outputs are `federated_summary.json`, `federated_summary.csv`, and `federated_summary.md`.
+
+## Prospective GPU telemetry
+
+The Roihu array script samples supported `nvidia-smi` fields every two seconds and records the command, interval, unsupported fields, and CSV observations. Sampling begins before training and is stopped on normal exit, failure, or signal. These observations are job-level GPU telemetry. They are not measured network traffic, per-client energy, neural-model energy, or neuromorphic energy, and their sampling interval limits short-event attribution.

@@ -1,3 +1,34 @@
-name: fedavg
-rounds: 100
-clients_per_round: 10
+federated:
+  algorithm: fedavg
+  rounds: 100
+  clients: 20
+  local_epochs: 1
+  local_batch_size: 32
+  optimizer: adam
+  learning_rate: 0.001
+  weight_decay: 0.0
+  gradient_clip: 1.0
+  learning_rate_scheduler: null
+  client_sampling: without_replacement
+  retain_optimizer_state: false
+  official_test_evaluation_during_rounds: false
+  data_loader_workers: 8
+  persistent_workers: true
+  partition:
+    method: label_dirichlet
+    alpha: 0.5
+    minimum_examples_per_client: 32
+    maximum_attempts: 1000
+  communication:
+    model_downloads_per_selected_client: 1
+    model_uploads_per_selected_client: 1
+    include_optimizer_state: false
+    include_dataset_transfer: false
+seed_streams:
+  split: split
+  partition: partition
+  model_initialization: model_initialization
+  client_selection: client_selection
+  client_training: client_training
+  validation: validation
+  final_test: final_test

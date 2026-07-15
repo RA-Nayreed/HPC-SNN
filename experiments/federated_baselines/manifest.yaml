@@ -1,0 +1,11 @@
+schema_version: 1
+collection: federated_baselines
+seeds_file: seeds.yaml
+centralized_context: ../../results/centralized/centralized_summary.json
+experiments:
+  - id: shd_lif_dirichlet_alpha_0_5_participation_0_50
+    config: shd/lif_dirichlet_alpha_0_5_participation_0_50.yaml
+    mandatory: true
+  - id: shd_lif_dirichlet_alpha_0_5_participation_0_25
+    config: shd/lif_dirichlet_alpha_0_5_participation_0_25.yaml
+    mandatory: true

@@ -1,19 +1,32 @@
 import argparse
 import json
 
-from fedapfa.configuration import expand_sweep, experiment_id, load_config
+from fedapfa.configuration import (
+    expand_sweep,
+    experiment_id,
+    load_config,
+    load_resolved_config,
+    validate_federated_config,
+)
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Resolve and validate an experiment configuration.")
     parser.add_argument("config")
     args = parser.parse_args()
-    config = load_config(args.config)
+    candidate = load_resolved_config(args.config)
+    if candidate.get("execution") == "federated":
+        validate_federated_config(candidate)
+        config = candidate
+        expanded = [config]
+    else:
+        config = load_config(args.config)
+        expanded = expand_sweep(config)
     print(
         json.dumps(
             {
                 "experiment_id": experiment_id(config),
-                "expanded_runs": [experiment_id(item) for item in expand_sweep(config)],
+                "expanded_runs": [experiment_id(item) for item in expanded],
             },
             indent=2,
         )
