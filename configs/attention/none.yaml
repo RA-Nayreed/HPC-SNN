@@ -1,1 +1,2 @@
-name: none
+model:
+  attention: {variant: none, lambda: 0.01}

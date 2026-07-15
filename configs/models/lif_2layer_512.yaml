@@ -1,0 +1,13 @@
+model:
+  name: lif_2layer_512
+  hidden_dims: [512, 512]
+  dropout: 0.4
+  batch_normalization: false
+  bias: true
+  neuron:
+    name: spikingjelly_lif
+    tau_ms: 10.05
+    threshold: 1.0
+    reset: subtract
+    detach_reset: true
+    surrogate: {name: atan, alpha: 5.0}

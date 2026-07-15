@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 set -euo pipefail
-echo "Configure this HPC-SNN script for your environment."
+fedapfa-train-centralized experiments/week01_pfa_reproduction/02_plain_lif_shd.yaml --device cpu "$@"

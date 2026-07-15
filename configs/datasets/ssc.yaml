@@ -1,0 +1,12 @@
+dataset:
+  name: ssc
+  root: data/raw/ssc
+  train_file: ssc_train.h5
+  validation_file: ssc_valid.h5
+  test_file: ssc_test.h5
+  classes: 35
+  raw_channels: 700
+  input_features: 140
+  frequency_bin_factor: 5
+  temporal_bin_ms: 10.0
+  validation_fraction: 0.1

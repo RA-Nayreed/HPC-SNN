@@ -1,0 +1,12 @@
+dataset:
+  name: shd
+  root: data/raw/shd
+  train_file: shd_train.h5
+  validation_file: null
+  test_file: shd_test.h5
+  classes: 20
+  raw_channels: 700
+  input_features: 140
+  frequency_bin_factor: 5
+  temporal_bin_ms: 10.0
+  validation_fraction: 0.1

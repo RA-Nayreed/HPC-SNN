@@ -1,18 +1,7 @@
-name: 09_ssc_smoke
-seed: 7
-dataset: ssc
-model: lif_2layer
-classes: 35
-input_features: 140
-attention: none
-lambda: 0.01
-dropout: .4
-device: cpu
-protocol: thesis_clean
-validation_fraction: 0.1
-training:
-  batch_size: 32
-  epochs: 2
-  learning_rate: 0.001
-  weight_decay: 0.0
-  gradient_clip: 1.0
+include: [../../configs/base/centralized.yaml, ../../configs/datasets/ssc.yaml, ../../configs/models/lif_2layer_128.yaml, ../../configs/attention/none.yaml]
+name: 09_ssc_128_smoke
+mode: smoke
+protocol: smoke
+device: cuda
+subset: {train_examples: 256, validation_examples: 128, test_examples: 0, stratified: true}
+training: {batch_size: 32, epochs: 1, max_train_batches: 8, max_validation_batches: 4, max_test_batches: null}

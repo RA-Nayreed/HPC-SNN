@@ -1,18 +1,8 @@
+include: [../../configs/base/centralized.yaml, ../../configs/datasets/ssc.yaml, ../../configs/models/lif_2layer_128.yaml, ../../configs/attention/none.yaml]
 name: 08_ssc_tiny_overfit
-seed: 7
-dataset: ssc
-model: lif_2layer
-classes: 35
-input_features: 140
-attention: none
-lambda: 0.01
-dropout: 0
+mode: tiny_overfit
+protocol: tiny_overfit
 device: cpu
-protocol: thesis_clean
-validation_fraction: 0.1
-training:
-  batch_size: 32
-  epochs: 30
-  learning_rate: 0.001
-  weight_decay: 0.0
-  gradient_clip: 1.0
+model: {dropout: 0.0}
+subset: {train_examples: 64, validation_examples: 0, test_examples: 0, stratified: true}
+training: {batch_size: 16, epochs: 100, target_accuracy: 0.95, early_stop_patience: 10}

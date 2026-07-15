@@ -1,1 +1,2 @@
-name: pending
+model:
+  attention: {variant: equation, lambda: 0.01}

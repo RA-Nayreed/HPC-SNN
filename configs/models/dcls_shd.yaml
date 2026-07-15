@@ -1,1 +1,14 @@
-name: pending
+model:
+  name: dcls_shd
+  hidden_dims: [256, 256]
+  maximum_delay_ms: 250
+  dropout: 0.4
+  batch_normalization: true
+  bias: false
+  neuron:
+    name: spikingjelly_lif
+    tau_ms: 10.05
+    threshold: 1.0
+    reset: subtract
+    detach_reset: true
+    surrogate: {name: atan, alpha: 5.0}

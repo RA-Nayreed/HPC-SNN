@@ -1,1 +1,2 @@
-name: pending
+model:
+  attention: {variant: public_behavior, lambda: 0.01}

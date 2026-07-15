@@ -1,1 +1,3 @@
-"""Implementation placeholder for the HPC-SNN roadmap."""
+from .centralized import run_epoch
+
+__all__ = ["run_epoch"]

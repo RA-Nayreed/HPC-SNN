@@ -1,0 +1,23 @@
+seed: 7
+output_root: runs
+resume: null
+training:
+  optimizer: adam
+  learning_rate: 0.001
+  delay_lr_multiplier: 100.0
+  weight_decay: 0.0
+  batch_size: 32
+  epochs: 1
+  gradient_clip: 1.0
+  max_train_batches: null
+  max_validation_batches: null
+  max_test_batches: null
+  target_accuracy: null
+  early_stop_patience: null
+  data_loader_workers: 0
+  persistent_workers: false
+subset:
+  train_examples: 0
+  validation_examples: 0
+  test_examples: 0
+  stratified: true
