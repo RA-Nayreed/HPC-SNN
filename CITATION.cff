@@ -1,0 +1,9 @@
+cff-version: 1.2.0
+message: "If you use HPC-SNN, please cite this software."
+title: "HPC-SNN"
+type: software
+authors:
+  - family-names: Nayreed
+    given-names: Rezwan Ahmad
+license: MIT
+repository-code: "https://github.com/RA-Nayreed/HPC-SNN"

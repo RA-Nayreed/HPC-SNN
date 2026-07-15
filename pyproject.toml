@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "fedapfa"
+version = "0.1.0"
+description = "Federated adaptive precision firing attention for SNNs"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Rezwan Ahmad Nayreed", email = "RezwanAhmad.Nayreed@student.oulu.fi" }]
+dependencies = ["pyyaml>=6.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[project.scripts]
+fedapfa-validate-config = "fedapfa.cli.validate_run:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/fedapfa"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

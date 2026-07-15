@@ -1,0 +1,3 @@
+name: shd
+num_classes: 20
+time_bins: 100

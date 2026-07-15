@@ -1,0 +1,3 @@
+name: dvs_gesture
+num_classes: 11
+time_bins: 60

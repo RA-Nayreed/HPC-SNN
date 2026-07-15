@@ -1,0 +1,7 @@
+name: research
+seed: 42
+dataset: shd
+model: lif_3layer
+training:
+  epochs: 100
+  batch_size: 64
