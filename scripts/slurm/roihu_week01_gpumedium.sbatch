@@ -9,6 +9,11 @@ set -euo pipefail
 : "${CONFIG:?CONFIG is required}" "${DATA_ROOT:?DATA_ROOT is required}" "${OUTPUT_ROOT:?OUTPUT_ROOT is required}"
 module purge
 module load python-pytorch/2.10
+VENV="${VENV:-/projappl/${CSC_PROJECT}/${USER}/hpc-snn-venv}"
+source "$VENV/bin/activate"
+
+echo "Python: $(command -v python3)"
+python3 -c "import torch, fedapfa, dcls; print(torch.__version__, fedapfa.__file__, dcls.__file__)"
 export PYTHONUNBUFFERED=1
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK}"
 hostname
