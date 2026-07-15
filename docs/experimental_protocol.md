@@ -32,3 +32,7 @@ Equation PfA and pinned public-code behaviour are separate treatments until thei
 ## Terminal conditions
 
 Independent evaluations permit validation early stopping with patience 20. Published-protocol configurations use fixed 150-epoch training with `early_stop_patience: null`. An evaluation is terminal only after every configured epoch or a documented valid early-stop condition. Interruption is not completion; `--resume-auto` continues from `checkpoints/last.pt`.
+
+## Collected evidence
+
+All 18 mandatory executions completed for the six experiments and seeds 7, 17, and 27. The generated [centralized summary](../results/centralized/centralized_summary.md) reports the aggregated measurements while preserving the protocol distinctions defined above. Observed results do not alter the split, selection, or acceptance rules in this methods document.

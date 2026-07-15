@@ -2,7 +2,7 @@
 
 Federated adaptive Parameter-free Attention for spiking neural networks.
 
-The canonical centralized evaluation covers SHD and SSC with official event files, deterministic 10 ms and 140-channel preprocessing, two-layer LIF models, an SHD DCLS reference, equation PfA, and pinned public-code-behaviour PfA. Execution records include strict acceptance, interruption-safe resumption, Git provenance, and three-seed aggregation.
+The centralized SHD and SSC evaluation is complete. It covers official event files, deterministic 10 ms and 140-channel preprocessing, two-layer LIF models, an SHD DCLS reference, equation PfA, and pinned public-code-behaviour PfA. All 18 required executions completed, and the generated [centralized summary](results/centralized/centralized_summary.md) records the three-seed evidence.
 
 ## Centralized evaluation matrix
 
@@ -18,6 +18,23 @@ The canonical centralized evaluation covers SHD and SSC with official event file
 Every experiment uses seeds 7, 17, and 27, giving 18 independent one-GPU tasks. The SSC 512-neuron model is outside the current evaluation scope. DCLS and PfA are not combined because no verified source in the repository specifies that architecture.
 
 The protocols are not statistically interchangeable. For SHD, `independent_evaluation` creates a deterministic stratified validation split from the official training set and accesses the official test set only after checkpoint selection. For SSC, it uses the official validation split for selection and accesses the official test set afterward. The SHD `published_protocol` reproduces source evaluation behaviour that monitors the official test split during training; those results are labelled as reproduction measurements and are not unbiased held-out estimates.
+
+## Centralized results
+
+Official-test accuracy is reported as mean ± sample standard deviation across seeds 7, 17, and 27:
+
+| Experiment | Protocol | Official-test accuracy |
+|---|---|---:|
+| SHD LIF | `independent_evaluation` | 76.3693% ± 2.26431% |
+| SHD DCLS | `published_protocol` | 91.3722% ± 0.243267% |
+| SHD equation PfA | `independent_evaluation` | 78.4305% ± 1.91990% |
+| SHD public-behaviour PfA | `published_protocol` | 84.0253% ± 0.0919464% |
+| SSC LIF-128 | `independent_evaluation` | 54.8981% ± 0.198346% |
+| SSC equation PfA-128 | `independent_evaluation` | 55.7812% ± 0.570910% |
+
+Every scientific status is `not_claimed`: the executions completed, but no verified literature target and tolerance are available for a reproduction decision. This status is neither a reproduction pass nor an execution failure.
+
+The independent-evaluation centralized results provide the reference measurements for subsequent federated experiments. Published-protocol measurements remain separate because they monitor the official SHD test split during training.
 
 ## Local setup and checks
 

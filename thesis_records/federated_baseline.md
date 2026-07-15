@@ -14,12 +14,14 @@ Only validated scientific records with compatible protocols may enter the analys
 
 ## Evidence collected
 
-No scientific evidence has yet been recorded for this evaluation.
+The centralized prerequisite is now available in the [centralized summary](../results/centralized/centralized_summary.md). The principal centralized comparison for the initial FedAvg evaluation is the SHD LIF `independent_evaluation` result: 76.3693% ± 2.26431% official-test accuracy across seeds 7, 17, and 27.
+
+No federated evidence has yet been collected. Neither federated implementation completion nor federated evaluation completion is claimed here.
 
 ## Unresolved scientific limitations
 
-Client partition validity, convergence, and communication accounting remain unmeasured.
+Client partition validity, convergence, communication volume, runtime, memory, utilization, energy, and scheduler-resource accounting remain unmeasured. The analysis must establish whether centralized and federated checkpoint-selection rules are comparable before interpreting any accuracy difference.
 
 ## Conclusions permitted by the evidence
 
-No scientific conclusion is currently permitted.
+The centralized reference permits a predefined comparison target for FedAvg. No conclusion about federated accuracy, convergence, communication efficiency, or resource behaviour is currently permitted.
