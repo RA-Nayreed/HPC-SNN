@@ -1,4 +1,4 @@
-"""Strict validation for fully resolved centralized experiment configurations."""
+"""Strict validation for resolved centralized experiment configurations."""
 
 from __future__ import annotations
 
@@ -9,8 +9,14 @@ from typing import Any
 DATASETS = {"shd": 20, "ssc": 35}
 MODELS = {("shd", "lif_2layer"), ("shd", "dcls_shd"), ("ssc", "lif_2layer_128"), ("ssc", "lif_2layer_512")}
 ATTENTION = {"none", "equation", "public_behavior"}
-PROTOCOLS = {"paper_compatible", "thesis_clean", "tiny_overfit", "smoke"}
-MODES = {"tiny_overfit", "smoke", "full", "sweep", "deferred"}
+PROTOCOLS = {"published_protocol", "independent_evaluation", "memorization_validation", "reduced_sample_evaluation"}
+MODES = {"memorization_validation", "reduced_sample_evaluation", "scientific_evaluation", "sweep"}
+EXPECTED_MODEL_CLASSES = {
+    "lif_2layer": "AudioLIFSNN",
+    "lif_2layer_128": "AudioLIFSNN",
+    "lif_2layer_512": "AudioLIFSNN",
+    "dcls_shd": "DCLSSHDSNN",
+}
 
 
 class ConfigurationError(ValueError):
@@ -152,27 +158,55 @@ def validate_config(config: Mapping[str, Any]) -> None:
             raise ConfigurationError(f"subset.{key} must be a non-negative integer")
     if not isinstance(subset.get("stratified"), bool):
         raise ConfigurationError("subset.stratified must be boolean")
-    if config["mode"] == "tiny_overfit" and config["protocol"] != "tiny_overfit":
-        raise ConfigurationError("tiny_overfit mode requires tiny_overfit protocol")
-    if config["mode"] in {"smoke", "sweep"} and config["protocol"] != "smoke":
-        raise ConfigurationError("smoke and sweep modes require smoke protocol")
-    if config["mode"] == "tiny_overfit":
+    if config["mode"] == "memorization_validation" and config["protocol"] != "memorization_validation":
+        raise ConfigurationError("memorization_validation mode requires memorization_validation protocol")
+    if config["mode"] in {"reduced_sample_evaluation", "sweep"} and config["protocol"] != "reduced_sample_evaluation":
+        raise ConfigurationError("reduced-sample and sweep modes require reduced_sample_evaluation protocol")
+    if config["mode"] == "memorization_validation":
         if not 32 <= subset["train_examples"] <= 64:
-            raise ConfigurationError("tiny_overfit requires 32-64 train examples")
+            raise ConfigurationError("memorization_validation requires 32-64 train examples")
         if subset["validation_examples"] or subset["test_examples"]:
-            raise ConfigurationError("tiny_overfit must not use validation or test subsets")
+            raise ConfigurationError("memorization_validation must not use validation or test subsets")
         if model["dropout"] != 0:
-            raise ConfigurationError("tiny_overfit requires dropout=0")
+            raise ConfigurationError("memorization_validation requires dropout=0")
         target = training.get("target_accuracy")
         if not isinstance(target, (int, float)) or not 0.95 <= target <= 1:
-            raise ConfigurationError("tiny_overfit target_accuracy must be at least 0.95")
-    if config["mode"] == "smoke":
+            raise ConfigurationError("memorization_validation target_accuracy must be at least 0.95")
+    if config["mode"] == "reduced_sample_evaluation":
         if training["max_train_batches"] is None or training["max_validation_batches"] is None:
-            raise ConfigurationError("smoke runs require hard train and validation batch limits")
+            raise ConfigurationError("reduced-sample evaluations require hard train and validation batch limits")
         if training["max_test_batches"] is not None:
-            raise ConfigurationError("smoke runs must not evaluate the official test set")
-    if config["protocol"] == "paper_compatible" and dataset_name != "shd":
-        raise ConfigurationError("paper_compatible is defined only for SHD")
+            raise ConfigurationError("reduced-sample evaluations must not evaluate the official test set")
+    if config["mode"] == "scientific_evaluation":
+        for key in ("max_train_batches", "max_validation_batches", "max_test_batches"):
+            if training[key] is not None:
+                raise ConfigurationError(f"scientific evaluations require training.{key}=null")
+        if any(subset[key] != 0 for key in ("train_examples", "validation_examples", "test_examples")):
+            raise ConfigurationError(
+                "scientific evaluations require the complete dataset; all subset sizes must be zero"
+            )
+        if config["protocol"] not in {"independent_evaluation", "published_protocol"}:
+            raise ConfigurationError(
+                "scientific evaluations require independent_evaluation or published_protocol protocol"
+            )
+        acceptance = _mapping(config, "acceptance")
+        expected_class = EXPECTED_MODEL_CLASSES[model["name"]]
+        if acceptance.get("expected_model_class") != expected_class:
+            raise ConfigurationError(f"acceptance.expected_model_class must be {expected_class}")
+        reference = acceptance.get("reference_test_accuracy")
+        tolerance = acceptance.get("absolute_tolerance")
+        if reference is None:
+            if tolerance is not None:
+                raise ConfigurationError("acceptance.absolute_tolerance must be null when the reference is null")
+        else:
+            if not isinstance(reference, (int, float)) or isinstance(reference, bool) or not 0 <= reference <= 1:
+                raise ConfigurationError("acceptance.reference_test_accuracy must be null or in [0, 1]")
+            if not isinstance(tolerance, (int, float)) or isinstance(tolerance, bool) or not 0 <= tolerance <= 1:
+                raise ConfigurationError("acceptance.absolute_tolerance must be in [0, 1] when a reference is set")
+        if config["protocol"] == "independent_evaluation" and reference is not None:
+            raise ConfigurationError("independent_evaluation runs cannot claim paper reproduction accuracy")
+    if config["protocol"] == "published_protocol" and dataset_name != "shd":
+        raise ConfigurationError("published_protocol is defined only for SHD")
     if model["name"] == "dcls_shd":
         if attention["variant"] != "none":
             raise ConfigurationError("dcls_shd does not implement PfA; attention must be none")

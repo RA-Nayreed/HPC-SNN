@@ -1,6 +1,0 @@
-include: [../../configs/base/centralized.yaml, ../../configs/datasets/shd_paper_compatible.yaml, ../../configs/models/dcls_shd.yaml, ../../configs/attention/none.yaml]
-name: 11_shd_dcls_paper_reference
-mode: full
-protocol: paper_compatible
-device: cuda
-training: {batch_size: 256, epochs: 150, max_train_batches: null, max_validation_batches: null, max_test_batches: null}

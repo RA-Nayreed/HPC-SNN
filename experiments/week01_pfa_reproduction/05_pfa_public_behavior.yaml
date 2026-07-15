@@ -1,7 +1,0 @@
-include: [../../configs/base/centralized.yaml, ../../configs/datasets/shd_thesis_clean.yaml, ../../configs/models/lif_2layer.yaml, ../../configs/attention/pfa_public_code_behavior.yaml]
-name: 05_shd_public_behavior_pfa_smoke
-mode: smoke
-protocol: smoke
-device: cuda
-subset: {train_examples: 256, validation_examples: 128, test_examples: 0, stratified: true}
-training: {batch_size: 32, epochs: 1, max_train_batches: 8, max_validation_batches: 2, max_test_batches: null}

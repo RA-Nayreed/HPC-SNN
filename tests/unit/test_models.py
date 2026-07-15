@@ -10,7 +10,7 @@ from fedapfa.models.shd_lif import AudioLIFSNN
 
 
 def test_factory_dimensions_metadata_and_parameter_free_attention():
-    config = load_config("experiments/week01_pfa_reproduction/01_tiny_overfit.yaml")
+    config = load_config("tests/data/configurations/centralized/shd_memorization_validation.yaml")
     plain = make_model(config)
     assert isinstance(plain, AudioLIFSNN) and plain.model_metadata["hidden_dims"] == [256, 256]
     attended = copy.deepcopy(config)
@@ -20,8 +20,8 @@ def test_factory_dimensions_metadata_and_parameter_free_attention():
 
 def test_shd_and_ssc_shapes_and_padded_logits():
     for path, classes in [
-        ("experiments/week01_pfa_reproduction/01_tiny_overfit.yaml", 20),
-        ("experiments/week01_pfa_reproduction/08_ssc_tiny_overfit.yaml", 35),
+        ("tests/data/configurations/centralized/shd_memorization_validation.yaml", 20),
+        ("tests/data/configurations/centralized/ssc_memorization_validation.yaml", 35),
     ]:
         model = make_model(load_config(path)).eval()
         inputs = torch.randn(2, 3, 140)
@@ -34,14 +34,14 @@ def test_shd_and_ssc_shapes_and_padded_logits():
 
 
 def test_state_does_not_leak():
-    model = make_model(load_config("experiments/week01_pfa_reproduction/01_tiny_overfit.yaml")).eval()
+    model = make_model(load_config("tests/data/configurations/centralized/shd_memorization_validation.yaml")).eval()
     inputs = torch.randn(1, 2, 140)
     lengths = torch.tensor([2])
     assert torch.allclose(model(inputs, lengths)[0], model(inputs, lengths)[0])
 
 
 def test_dcls_has_no_fallback():
-    config = load_config("experiments/week01_pfa_reproduction/03_dcls_shd.yaml")
+    config = load_config("experiments/centralized/shd/dcls_published_protocol.yaml")
     if dcls_available():
         assert isinstance(make_model(config), DCLSSHDSNN)
     else:

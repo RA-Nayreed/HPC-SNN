@@ -14,7 +14,7 @@ def test_cuda_request_fails_without_cuda(monkeypatch):
 
 
 def test_checkpoint_saves_and_restores_complete_state(tmp_path):
-    config = load_config("experiments/week01_pfa_reproduction/01_tiny_overfit.yaml")
+    config = load_config("tests/data/configurations/centralized/shd_memorization_validation.yaml")
     model = make_model(config)
     optimizer = make_optimizer(model, config)
     path = tmp_path / "state.pt"
@@ -33,7 +33,7 @@ def test_checkpoint_saves_and_restores_complete_state(tmp_path):
 
 
 def test_dcls_optimizer_uses_delay_multiplier_when_available():
-    config = load_config("experiments/week01_pfa_reproduction/03_dcls_shd.yaml")
+    config = load_config("experiments/centralized/shd/dcls_published_protocol.yaml")
     try:
         model = make_model(config)
     except Exception:

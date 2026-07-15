@@ -1,6 +1,0 @@
-include: [../../configs/base/centralized.yaml, ../../configs/datasets/shd_thesis_clean.yaml, ../../configs/models/lif_2layer.yaml, ../../configs/attention/none.yaml]
-name: 10_shd_plain_lif_full
-mode: full
-protocol: thesis_clean
-device: cuda
-training: {batch_size: 256, epochs: 150, max_train_batches: null, max_validation_batches: null, max_test_batches: null}

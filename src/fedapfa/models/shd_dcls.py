@@ -53,9 +53,7 @@ class DCLSSHDSNN(nn.Module):
                 bias=model["bias"],
             )
         except Exception as error:
-            raise DCLSUnavailableError(
-                f"dcls==0.1.1 layer construction failed; PyTorch/aarch64 compatibility is unverified: {error}"
-            ) from error
+            raise DCLSUnavailableError(f"dcls==0.1.1 layer construction failed: {error}") from error
         self.normalization1 = nn.BatchNorm1d(first) if model["batch_normalization"] else nn.Identity()
         self.normalization2 = nn.BatchNorm1d(second) if model["batch_normalization"] else nn.Identity()
         self.dropout = nn.Dropout(model["dropout"])

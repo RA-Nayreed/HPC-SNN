@@ -1,7 +1,0 @@
-include: [../../configs/base/centralized.yaml, ../../configs/datasets/shd_thesis_clean.yaml, ../../configs/models/dcls_shd.yaml, ../../configs/attention/none.yaml]
-name: 03_shd_dcls_smoke
-mode: smoke
-protocol: smoke
-device: cuda
-subset: {train_examples: 256, validation_examples: 128, test_examples: 0, stratified: true}
-training: {batch_size: 32, epochs: 1, max_train_batches: 4, max_validation_batches: 2, max_test_batches: null}

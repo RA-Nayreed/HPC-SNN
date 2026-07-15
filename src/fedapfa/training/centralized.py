@@ -14,6 +14,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 
 from fedapfa.datasets.sequence_collation import EventBatch, collate_event_sequences
+from fedapfa.training.acceptance import evaluate_acceptance
 from fedapfa.training.checkpointing import load_checkpoint, save_checkpoint
 
 
@@ -42,11 +43,11 @@ def seed_worker(worker_id: int) -> None:
     random.seed(seed)
 
 
-def make_loader(dataset, config, shuffle):
+def make_loader(dataset, config, shuffle, generator=None):
     if dataset is None:
         return None
     training = config["training"]
-    generator = torch.Generator().manual_seed(config["seed"])
+    generator = generator or torch.Generator().manual_seed(config["seed"])
     return DataLoader(
         dataset,
         batch_size=training["batch_size"],
@@ -143,6 +144,39 @@ def run_epoch(model, loader, device, optimizer=None, max_batches=None, gradient_
     }
 
 
+def _reconcile_metrics_for_resume(metrics_path: Path, start_epoch: int) -> None:
+    """Discard only records written after the checkpoint being resumed."""
+
+    if not metrics_path.is_file():
+        return
+    kept = []
+    for line in metrics_path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        epoch = record.get("epoch") if isinstance(record, dict) else None
+        if isinstance(epoch, int) and epoch < start_epoch:
+            kept.append(json.dumps(record, sort_keys=True))
+    metrics_path.write_text("".join(f"{line}\n" for line in kept), encoding="utf-8")
+
+
+def _metric_records(metrics_path: Path) -> list[dict]:
+    records = []
+    if metrics_path.is_file():
+        for line in metrics_path.read_text(encoding="utf-8").splitlines():
+            if line.strip():
+                try:
+                    value = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if isinstance(value, dict):
+                    records.append(value)
+    return records
+
+
 def train_centralized(model, bundle, config, run_dir, resume_checkpoint=None):
     seed_everything(config["seed"])
     device = resolve_device(config["device"])
@@ -153,12 +187,21 @@ def train_centralized(model, bundle, config, run_dir, resume_checkpoint=None):
     start_epoch = global_step = 0
     best = -1.0
     epochs_without_improvement = 0
+    accumulated_runtime = 0.0
+    train_generator = torch.Generator().manual_seed(config["seed"])
     if resume_checkpoint:
-        state = load_checkpoint(resume_checkpoint, model, optimizer, scheduler)
+        state = load_checkpoint(resume_checkpoint, model, optimizer, scheduler, expected_config=config)
         start_epoch = state["epoch"] + 1
         global_step = state["global_step"]
         best = state.get("best_selection_accuracy", -1.0)
-    train_loader = make_loader(bundle.train, config, True)
+        training_state = state.get("training_state", {})
+        epochs_without_improvement = training_state.get("epochs_without_improvement", 0)
+        accumulated_runtime = training_state.get("runtime_seconds", 0.0)
+        generator_state = training_state.get("train_loader_generator_state")
+        if generator_state is not None:
+            train_generator.set_state(generator_state)
+
+    train_loader = make_loader(bundle.train, config, True, train_generator)
     validation_loader = make_loader(bundle.validation, config, False)
     path = Path(run_dir)
     checkpoint_dir = path / "checkpoints"
@@ -171,11 +214,22 @@ def train_centralized(model, bundle, config, run_dir, resume_checkpoint=None):
         handler.setFormatter(formatter)
         logger.addHandler(handler)
     logger.info("starting %s on %s with %s", config["name"], device, type(model).__name__)
+
     metrics_path = path / "metrics.jsonl"
-    accepted = False
+    if resume_checkpoint:
+        _reconcile_metrics_for_resume(metrics_path, start_epoch)
+    legacy_accepted = False
     final = {}
+    last_epoch = start_epoch - 1
+    termination_reason = None
+    patience = training.get("early_stop_patience")
+    if patience is not None and epochs_without_improvement >= patience:
+        termination_reason = "early_stopped"
+
     with metrics_path.open("a", encoding="utf-8") as metrics_file:
         for epoch in range(start_epoch, training["epochs"]):
+            if termination_reason is not None:
+                break
             if device.type == "cuda":
                 torch.cuda.reset_peak_memory_stats(device)
             started = time.monotonic()
@@ -189,13 +243,16 @@ def train_centralized(model, bundle, config, run_dir, resume_checkpoint=None):
                 else None
             )
             selection = validation_metrics["accuracy"] if validation_metrics else train_metrics["accuracy"]
+            duration = time.monotonic() - started
+            accumulated_runtime += duration
+            last_epoch = epoch
             record = {
                 "epoch": epoch,
                 "global_step": global_step,
                 "train": train_metrics,
                 "validation": validation_metrics,
                 "learning_rates": [group["lr"] for group in optimizer.param_groups],
-                "epoch_duration_seconds": time.monotonic() - started,
+                "epoch_duration_seconds": duration,
                 "peak_cuda_memory_bytes": torch.cuda.max_memory_allocated(device) if device.type == "cuda" else None,
             }
             metrics_file.write(json.dumps(record, sort_keys=True) + "\n")
@@ -206,9 +263,18 @@ def train_centralized(model, bundle, config, run_dir, resume_checkpoint=None):
                 train_metrics["accuracy"],
                 None if validation_metrics is None else f"{validation_metrics['accuracy']:.4f}",
             )
-            if selection > best:
+            improved = selection > best
+            if improved:
                 best = selection
                 epochs_without_improvement = 0
+            else:
+                epochs_without_improvement += 1
+            checkpoint_training_state = {
+                "epochs_without_improvement": epochs_without_improvement,
+                "runtime_seconds": accumulated_runtime,
+                "train_loader_generator_state": train_generator.get_state(),
+            }
+            if improved:
                 save_checkpoint(
                     checkpoint_dir / "best_validation.pt",
                     model,
@@ -218,56 +284,95 @@ def train_centralized(model, bundle, config, run_dir, resume_checkpoint=None):
                     epoch,
                     global_step,
                     best,
+                    checkpoint_training_state,
                 )
-            else:
-                epochs_without_improvement += 1
-            save_checkpoint(checkpoint_dir / "last.pt", model, optimizer, scheduler, config, epoch, global_step, best)
-            if config["mode"] == "tiny_overfit" and train_metrics["accuracy"] >= training["target_accuracy"]:
-                accepted = True
-                logger.info("tiny-overfit target reached at epoch %d", epoch)
-                break
-            patience = training.get("early_stop_patience")
-            if patience is not None and epochs_without_improvement >= patience:
+            save_checkpoint(
+                checkpoint_dir / "last.pt",
+                model,
+                optimizer,
+                scheduler,
+                config,
+                epoch,
+                global_step,
+                best,
+                checkpoint_training_state,
+            )
+            if config["mode"] == "memorization_validation" and train_metrics["accuracy"] >= training["target_accuracy"]:
+                legacy_accepted = True
+                termination_reason = "target_reached"
+                logger.info("memorization validation target reached at epoch %d", epoch)
+            elif patience is not None and epochs_without_improvement >= patience:
+                termination_reason = "early_stopped"
                 logger.info("early stopping after %d epochs without improvement", patience)
-                break
-    if config["mode"] == "tiny_overfit" and not accepted:
-        logger.error("tiny-overfit target %.3f was not reached", training["target_accuracy"])
-    if config["mode"] == "smoke":
-        accepted = True
+
+    if termination_reason is None:
+        termination_reason = "epochs_completed" if last_epoch == training["epochs"] - 1 else "interrupted"
+    if config["mode"] == "memorization_validation" and not legacy_accepted:
+        logger.error("memorization validation target %.3f was not reached", training["target_accuracy"])
+    if config["mode"] == "reduced_sample_evaluation":
+        legacy_accepted = termination_reason == "epochs_completed"
+
     best_path = checkpoint_dir / "best_validation.pt"
-    if bundle.test:
-        load_checkpoint(best_path, model)
+    if bundle.test and best_path.is_file():
+        load_checkpoint(best_path, model, expected_config=config)
         test_dataset = bundle.test() if callable(bundle.test) else bundle.test
         bundle.metadata["official_test_accessed"] = True
+        bundle.metadata["official_test_evaluated_after_model_selection"] = True
+        bundle.metadata["official_test_examples"] = len(test_dataset)
+        no_limits = all(
+            training.get(key) is None for key in ("max_train_batches", "max_validation_batches", "max_test_batches")
+        )
+        bundle.metadata["complete_dataset_used"] = bool(
+            bundle.metadata.get("complete_training_data_used")
+            and config["subset"]["test_examples"] == 0
+            and no_limits
+            and len(test_dataset) > 0
+        )
         if bundle.selected_indices:
             (path / "selected_indices.json").write_text(
                 json.dumps(bundle.selected_indices, indent=2, sort_keys=True), encoding="utf-8"
             )
         test_loader = make_loader(test_dataset, config, False)
         final["test"] = run_epoch(model, test_loader, device, None, training["max_test_batches"])
+    elif bundle.test:
+        logger.error("selected checkpoint is missing; official test evaluation was not run")
+
+    records = _metric_records(metrics_path)
+    peaks = [record["peak_cuda_memory_bytes"] for record in records if record.get("peak_cuda_memory_bytes") is not None]
+    termination = {
+        "reason": termination_reason,
+        "last_epoch": last_epoch,
+        "configured_epochs": training["epochs"],
+        "epochs_without_improvement": epochs_without_improvement,
+        "early_stop_documented": termination_reason == "early_stopped",
+    }
     final.update(
         {
-            "accepted": accepted if config["mode"] in {"tiny_overfit", "smoke"} else True,
+            "accepted": legacy_accepted,
             "best_selection_accuracy": best,
             "model_class": type(model).__name__,
             "model_metadata": model.model_metadata,
             "protocol": bundle.metadata,
             "parameter_count": sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad),
+            "runtime_seconds": sum(float(record.get("epoch_duration_seconds", 0.0)) for record in records),
+            "peak_cuda_memory_bytes": max(peaks) if peaks else None,
+            "termination": termination,
         }
     )
+    acceptance = evaluate_acceptance(config, path, final, bundle.metadata, termination)
+    if config["mode"] == "scientific_evaluation":
+        final["accepted"] = acceptance["completed"]
+    final["completed"] = acceptance["completed"]
+    final["scientific_status"] = acceptance["scientific_status"]
     (path / "final_metrics.json").write_text(json.dumps(final, indent=2, sort_keys=True), encoding="utf-8")
     (path / "acceptance.json").write_text(
-        json.dumps(
-            {
-                "mode": config["mode"],
-                "accepted": final["accepted"],
-                "scientific_result": bundle.metadata["scientific_result"],
-            },
-            indent=2,
-        ),
-        encoding="utf-8",
+        json.dumps(acceptance, indent=2, sort_keys=True, allow_nan=False), encoding="utf-8"
     )
-    logger.info("finished accepted=%s", final["accepted"])
+    logger.info(
+        "finished completed=%s scientific_status=%s",
+        acceptance["completed"],
+        acceptance["scientific_status"],
+    )
     return final
 
 

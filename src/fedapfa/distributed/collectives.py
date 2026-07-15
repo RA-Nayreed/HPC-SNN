@@ -1,1 +1,1 @@
-"""Implementation placeholder for the HPC-SNN roadmap."""
+"""No implementation is currently provided for this module."""

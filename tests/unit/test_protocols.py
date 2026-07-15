@@ -24,7 +24,7 @@ def _paths(config, tmp_path):
 
 
 def test_tiny_protocol_reuses_subset_and_never_opens_test(tmp_path):
-    config = _paths(load_config("experiments/week01_pfa_reproduction/01_tiny_overfit.yaml"), tmp_path)
+    config = _paths(load_config("tests/data/configurations/centralized/shd_memorization_validation.yaml"), tmp_path)
     bundle = prepare_datasets(config)
     assert bundle.train is bundle.validation
     assert bundle.test is None
@@ -32,22 +32,22 @@ def test_tiny_protocol_reuses_subset_and_never_opens_test(tmp_path):
     assert not bundle.metadata["official_test_accessed"]
 
 
-def test_clean_and_paper_protocols_change_behavior(tmp_path):
-    clean = _paths(load_config("experiments/week01_pfa_reproduction/10_shd_plain_lif_full.yaml"), tmp_path)
-    clean_bundle = prepare_datasets(clean)
-    assert not clean_bundle.metadata["official_test_monitored_during_training"]
-    assert not clean_bundle.metadata["official_test_accessed"]
-    assert clean_bundle.test is not None
-    paper = copy.deepcopy(clean)
-    paper["protocol"] = "paper_compatible"
-    paper["dataset"]["validation_file"] = "test.h5"
-    paper_bundle = prepare_datasets(paper)
-    assert paper_bundle.metadata["official_test_monitored_during_training"]
-    assert paper_bundle.metadata["metric_label"] == "reproduction"
+def test_independent_and_published_protocols_change_behavior(tmp_path):
+    independent = _paths(load_config("experiments/centralized/shd/lif_independent_evaluation.yaml"), tmp_path)
+    independent_bundle = prepare_datasets(independent)
+    assert not independent_bundle.metadata["official_test_monitored_during_training"]
+    assert not independent_bundle.metadata["official_test_accessed"]
+    assert independent_bundle.test is not None
+    published = copy.deepcopy(independent)
+    published["protocol"] = "published_protocol"
+    published["dataset"]["validation_file"] = "test.h5"
+    published_bundle = prepare_datasets(published)
+    assert published_bundle.metadata["official_test_monitored_during_training"]
+    assert published_bundle.metadata["metric_label"] == "reproduction"
 
 
-def test_ssc_uses_official_validation_split_without_opening_test_in_smoke(tmp_path):
-    config = _paths(load_config("experiments/week01_pfa_reproduction/09_ssc_smoke.yaml"), tmp_path)
+def test_ssc_reduced_sample_evaluation_uses_official_validation_split_without_opening_test(tmp_path):
+    config = _paths(load_config("tests/data/configurations/centralized/ssc_reduced_sample_lif.yaml"), tmp_path)
     bundle = prepare_datasets(config)
     assert bundle.validation.path.name == "valid.h5"
     assert bundle.test is None
@@ -55,8 +55,8 @@ def test_ssc_uses_official_validation_split_without_opening_test_in_smoke(tmp_pa
     assert set(bundle.selected_indices) == {"train", "validation"}
 
 
-def test_thesis_clean_defers_test_hdf5_construction_until_requested(tmp_path, monkeypatch):
-    config = _paths(load_config("experiments/week01_pfa_reproduction/10_shd_plain_lif_full.yaml"), tmp_path)
+def test_independent_evaluation_defers_test_hdf5_construction_until_requested(tmp_path, monkeypatch):
+    config = _paths(load_config("experiments/centralized/shd/lif_independent_evaluation.yaml"), tmp_path)
     opened = []
     original = protocols_module._dataset
 

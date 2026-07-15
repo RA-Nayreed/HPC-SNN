@@ -1,0 +1,27 @@
+include:
+  - ../../../configs/base/centralized.yaml
+  - ../../../configs/datasets/shd_independent_evaluation.yaml
+  - ../../../configs/models/lif_2layer.yaml
+  - ../../../configs/attention/none.yaml
+name: shd_lif_independent_evaluation
+mode: scientific_evaluation
+protocol: independent_evaluation
+device: cuda
+metadata:
+  experiment: shd_lif_independent_evaluation
+  protocol_family: independent_evaluation
+  claim: independent_held_out_evaluation
+training:
+  batch_size: 256
+  epochs: 150
+  early_stop_patience: 20
+  data_loader_workers: 8
+  persistent_workers: true
+  max_train_batches: null
+  max_validation_batches: null
+  max_test_batches: null
+subset: {train_examples: 0, validation_examples: 0, test_examples: 0, stratified: true}
+acceptance:
+  expected_model_class: AudioLIFSNN
+  reference_test_accuracy: null
+  absolute_tolerance: null

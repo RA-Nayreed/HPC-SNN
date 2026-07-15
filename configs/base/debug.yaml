@@ -1,7 +1,0 @@
-name: debug
-seed: 7
-dataset: shd
-model: lif_2layer
-training:
-  epochs: 1
-  batch_size: 8

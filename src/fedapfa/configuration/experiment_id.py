@@ -24,7 +24,7 @@ def expand_sweep(config: Mapping[str, Any]) -> list[dict[str, Any]]:
     runs = []
     for value in config["sweep"]["values"]:
         resolved = json.loads(canonical_config(config))
-        resolved["mode"] = "smoke"
+        resolved["mode"] = "reduced_sample_evaluation"
         resolved["name"] = f"{config['name']}-lambda-{value:g}"
         resolved["model"]["attention"]["lambda"] = value
         resolved.pop("sweep")

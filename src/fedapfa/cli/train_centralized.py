@@ -1,4 +1,4 @@
-"""Command-line entry point for centralized runs and bounded lambda sweeps."""
+"""Command-line entry point for centralized runs and reduced-sample lambda grids."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from fedapfa.configuration import expand_sweep, load_config, validate_config
 from fedapfa.models.model_factory import make_model
 from fedapfa.training.centralized import resolve_device, train_centralized
 from fedapfa.training.protocols import prepare_datasets
-from fedapfa.utilities.run_records import initialize_run
+from fedapfa.utilities.run_records import initialize_run, plan_run
 
 
 def _override(config, args):
@@ -22,6 +22,8 @@ def _override(config, args):
         resolved["output_root"] = args.output_root
     if args.device:
         resolved["device"] = args.device
+    if getattr(args, "seed", None) is not None:
+        resolved["seed"] = args.seed
     validate_config(resolved)
     return resolved
 
@@ -32,25 +34,35 @@ def main() -> None:
     parser.add_argument("--data-root")
     parser.add_argument("--output-root")
     parser.add_argument("--device", choices=("cpu", "cuda"))
-    parser.add_argument("--resume")
+    parser.add_argument("--seed", type=int)
+    resume_group = parser.add_mutually_exclusive_group()
+    resume_group.add_argument("--resume")
+    resume_group.add_argument("--resume-auto", action="store_true")
     args = parser.parse_args()
     base = _override(load_config(args.config), args)
     runs = expand_sweep(base)
     if args.resume and len(runs) != 1:
         parser.error("--resume cannot be used with a sweep")
     command = shlex.join([sys.executable, "-m", "fedapfa.cli.train_centralized", *sys.argv[1:]])
-    all_accepted = True
+    all_completed = True
     for config in runs:
         validate_config(config)
-        if config["mode"] == "deferred":
-            raise RuntimeError(f"experiment {config['name']} is marked deferred")
+        action = plan_run(config, command, args.resume, args.resume_auto)
+        if action.skip_completed:
+            print(f"completed run already exists; skipping: {action.run_dir}")
+            continue
         model = make_model(config)
         resolve_device(config["device"])
         bundle = prepare_datasets(config)
-        run_dir = initialize_run(config, bundle.selected_indices, command, args.resume)
-        result = train_centralized(model, bundle, config, run_dir, args.resume)
-        all_accepted = all_accepted and result["accepted"]
-    if not all_accepted:
+        run_dir = initialize_run(
+            config,
+            bundle.selected_indices,
+            command,
+            action.resume_checkpoint,
+        )
+        result = train_centralized(model, bundle, config, run_dir, action.resume_checkpoint)
+        all_completed = all_completed and result["completed"]
+    if not all_completed:
         raise SystemExit(2)
 
 

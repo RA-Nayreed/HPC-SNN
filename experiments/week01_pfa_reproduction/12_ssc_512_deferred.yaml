@@ -1,6 +1,0 @@
-include: [../../configs/base/centralized.yaml, ../../configs/datasets/ssc.yaml, ../../configs/models/lif_2layer_512.yaml, ../../configs/attention/none.yaml]
-name: 12_ssc_512_deferred
-mode: deferred
-protocol: thesis_clean
-device: cuda
-training: {batch_size: 128, epochs: 1, max_train_batches: null, max_validation_batches: null, max_test_batches: null}

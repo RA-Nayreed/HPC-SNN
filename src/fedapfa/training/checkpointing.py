@@ -16,7 +16,17 @@ def rng_state():
     }
 
 
-def save_checkpoint(path, model, optimizer, scheduler, config, epoch, global_step, best_selection_accuracy=-1.0):
+def save_checkpoint(
+    path,
+    model,
+    optimizer,
+    scheduler,
+    config,
+    epoch,
+    global_step,
+    best_selection_accuracy=-1.0,
+    training_state=None,
+):
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     torch.save(
         {
@@ -29,13 +39,18 @@ def save_checkpoint(path, model, optimizer, scheduler, config, epoch, global_ste
             "epoch": epoch,
             "global_step": global_step,
             "best_selection_accuracy": best_selection_accuracy,
+            "training_state": training_state or {},
         },
         path,
     )
 
 
-def load_checkpoint(path, model, optimizer=None, scheduler=None):
+def load_checkpoint(path, model, optimizer=None, scheduler=None, expected_config=None):
     checkpoint = torch.load(path, map_location="cpu", weights_only=False)
+    if expected_config is not None and checkpoint.get("resolved_config") != expected_config:
+        raise RuntimeError("checkpoint resolved configuration is incompatible")
+    if checkpoint.get("model_class") != type(model).__name__:
+        raise RuntimeError("checkpoint model class is incompatible")
     model.load_state_dict(checkpoint["model"])
     if optimizer is not None:
         optimizer.load_state_dict(checkpoint["optimizer"])

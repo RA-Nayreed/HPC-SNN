@@ -1,1 +1,1 @@
-"""Reserved test module for the HPC-SNN implementation roadmap."""
+"""Reserved test module with no recorded behavioral evidence."""

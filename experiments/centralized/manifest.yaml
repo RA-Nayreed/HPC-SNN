@@ -1,0 +1,22 @@
+schema_version: 1
+collection: centralized
+seeds_file: seeds.yaml
+experiments:
+  - id: shd_lif_independent_evaluation
+    config: shd/lif_independent_evaluation.yaml
+    mandatory: true
+  - id: shd_dcls_published_protocol
+    config: shd/dcls_published_protocol.yaml
+    mandatory: true
+  - id: shd_pfa_equation_independent_evaluation
+    config: shd/pfa_equation_independent_evaluation.yaml
+    mandatory: true
+  - id: shd_pfa_public_published_protocol
+    config: shd/pfa_public_published_protocol.yaml
+    mandatory: true
+  - id: ssc_lif_128_independent_evaluation
+    config: ssc/lif_128_independent_evaluation.yaml
+    mandatory: true
+  - id: ssc_pfa_equation_128_independent_evaluation
+    config: ssc/pfa_equation_128_independent_evaluation.yaml
+    mandatory: true

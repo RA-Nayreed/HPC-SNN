@@ -1,1 +1,1 @@
-"""HPC-SNN command or analysis scaffold."""
+"""Research analysis module; no scientific evidence is recorded here."""

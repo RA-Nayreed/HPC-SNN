@@ -1,8 +1,0 @@
-include: [../../configs/base/centralized.yaml, ../../configs/datasets/shd_thesis_clean.yaml, ../../configs/models/lif_2layer.yaml, ../../configs/attention/none.yaml]
-name: 01_shd_tiny_overfit
-mode: tiny_overfit
-protocol: tiny_overfit
-device: cpu
-model: {dropout: 0.0}
-subset: {train_examples: 64, validation_examples: 0, test_examples: 0, stratified: true}
-training: {batch_size: 16, epochs: 100, target_accuracy: 0.95, early_stop_patience: 10}

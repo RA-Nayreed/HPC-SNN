@@ -46,17 +46,26 @@ def prepare_datasets(config) -> DatasetBundle:
     seed = config["seed"]
     protocol = config["protocol"]
     train_labels = _labels(paths["train"])
-    if protocol == "tiny_overfit":
+    if protocol == "memorization_validation":
         chosen = select_subset(train_labels, subset["train_examples"], seed, subset["stratified"])
-        tiny = _dataset(paths["train"], chosen, config)
+        memorization_dataset = _dataset(paths["train"], chosen, config)
         return DatasetBundle(
-            tiny,
-            tiny,
+            memorization_dataset,
+            memorization_dataset,
             None,
             {"train": chosen.tolist()},
-            {"protocol": protocol, "official_test_accessed": False, "scientific_result": False},
+            {
+                "protocol": protocol,
+                "official_test_accessed": False,
+                "official_test_monitored_during_training": False,
+                "official_test_evaluated_after_model_selection": False,
+                "scientific_result": False,
+                "complete_training_data_used": False,
+                "complete_dataset_used": False,
+            },
         )
-    if dataset["name"] == "shd" and protocol in {"thesis_clean", "smoke"}:
+
+    if dataset["name"] == "shd" and protocol in {"independent_evaluation", "reduced_sample_evaluation"}:
         train_indices, validation_indices = stratified_split(train_labels, dataset["validation_fraction"], seed)
     else:
         train_indices = range(len(train_labels))
@@ -67,7 +76,8 @@ def prepare_datasets(config) -> DatasetBundle:
         train_indices = [train_indices[i] for i in local]
     train = _dataset(paths["train"], train_indices, config)
     selected = {"train": [int(i) for i in train_indices]}
-    if dataset["name"] == "shd" and protocol in {"thesis_clean", "smoke"}:
+
+    if dataset["name"] == "shd" and protocol in {"independent_evaluation", "reduced_sample_evaluation"}:
         if subset["validation_examples"]:
             local = select_subset(
                 train_labels[validation_indices], subset["validation_examples"], seed + 1, subset["stratified"]
@@ -82,8 +92,19 @@ def prepare_datasets(config) -> DatasetBundle:
             chosen = select_subset(validation.labels(), subset["validation_examples"], seed + 1, subset["stratified"])
             validation = _dataset(validation_path, chosen, config, validate=False)
             selected["validation"] = chosen.tolist()
+
+    no_training_subset = subset["train_examples"] == 0 and subset["validation_examples"] == 0
+    if dataset["name"] == "shd" and protocol in {"independent_evaluation", "reduced_sample_evaluation"}:
+        complete_training_data_used = (
+            no_training_subset and validation is not None and len(train) + len(validation) == len(train_labels)
+        )
+        selection_split = "derived_train_validation"
+    else:
+        complete_training_data_used = no_training_subset and len(train) == len(train_labels) and validation is not None
+        selection_split = "official_test" if protocol == "published_protocol" else "official_validation"
+
     test = None
-    if protocol in {"thesis_clean", "paper_compatible"} and config["mode"] == "full":
+    if protocol in {"independent_evaluation", "published_protocol"} and config["mode"] == "scientific_evaluation":
 
         def create_test_dataset():
             test_indices = None
@@ -94,6 +115,8 @@ def prepare_datasets(config) -> DatasetBundle:
             return _dataset(paths["test"], test_indices, config)
 
         test = create_test_dataset
+
+    published = protocol == "published_protocol"
     return DatasetBundle(
         train,
         validation,
@@ -101,9 +124,18 @@ def prepare_datasets(config) -> DatasetBundle:
         selected,
         {
             "protocol": protocol,
-            "official_test_monitored_during_training": protocol == "paper_compatible",
-            "official_test_accessed": protocol == "paper_compatible",
-            "scientific_result": config["mode"] == "full",
-            "metric_label": "reproduction" if protocol == "paper_compatible" else "clean",
+            "selection_split": selection_split,
+            "official_test_monitored_during_training": published,
+            "official_test_accessed": published,
+            "official_test_evaluated_after_model_selection": False,
+            "official_test_role": "selection_and_final_test" if published else "final_test_only",
+            "official_test_examples": None,
+            "scientific_result": config["mode"] == "scientific_evaluation",
+            "metric_label": "reproduction" if published else "independent_evaluation",
+            "source_train_examples": len(train_labels),
+            "train_examples": len(train),
+            "validation_examples": len(validation) if validation is not None else 0,
+            "complete_training_data_used": complete_training_data_used,
+            "complete_dataset_used": False,
         },
     )

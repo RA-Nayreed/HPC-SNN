@@ -22,6 +22,7 @@ fedapfa-inspect-data = "fedapfa.cli.inspect_dataset:main"
 fedapfa-validate-config = "fedapfa.cli.validate_run:main"
 fedapfa-train-centralized = "fedapfa.cli.train_centralized:main"
 fedapfa-evaluate-checkpoint = "fedapfa.cli.evaluate_checkpoint:main"
+fedapfa-summarize-centralized = "fedapfa.cli.summarize_centralized:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fedapfa"]

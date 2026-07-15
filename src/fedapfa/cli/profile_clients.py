@@ -1,1 +1,1 @@
-"""HPC-SNN command or analysis scaffold."""
+"""Repository command or analysis module."""

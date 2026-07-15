@@ -1,0 +1,12 @@
+include:
+  - ../../../../configs/base/centralized.yaml
+  - ../../../../configs/datasets/shd_independent_evaluation.yaml
+  - ../../../../configs/models/lif_2layer.yaml
+  - ../../../../configs/attention/pfa_equation_reference.yaml
+name: shd_pfa_lambda_grid
+mode: sweep
+protocol: reduced_sample_evaluation
+device: cuda
+subset: {train_examples: 128, validation_examples: 64, test_examples: 0, stratified: true}
+training: {batch_size: 32, epochs: 1, max_train_batches: 2, max_validation_batches: 1, max_test_batches: null}
+sweep: {parameter: model.attention.lambda, values: [1.0e-6, 1.0e-5, 1.0e-4, 1.0e-3, 1.0e-2, 1.0e-1]}

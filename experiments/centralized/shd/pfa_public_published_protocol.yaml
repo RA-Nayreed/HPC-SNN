@@ -1,0 +1,28 @@
+include:
+  - ../../../configs/base/centralized.yaml
+  - ../../../configs/datasets/shd_published_protocol.yaml
+  - ../../../configs/models/lif_2layer.yaml
+  - ../../../configs/attention/pfa_public_code_behavior.yaml
+name: shd_pfa_public_published_protocol
+mode: scientific_evaluation
+protocol: published_protocol
+device: cuda
+metadata:
+  experiment: shd_pfa_public_published_protocol
+  protocol_family: published_protocol
+  upstream_behavior_commit: 0898fc22480c86bccd7f6fccb0d43fdfbd579797
+  claim: not_claimed_until_reference_verified
+training:
+  batch_size: 256
+  epochs: 150
+  early_stop_patience: null
+  data_loader_workers: 8
+  persistent_workers: true
+  max_train_batches: null
+  max_validation_batches: null
+  max_test_batches: null
+subset: {train_examples: 0, validation_examples: 0, test_examples: 0, stratified: true}
+acceptance:
+  expected_model_class: AudioLIFSNN
+  reference_test_accuracy: null
+  absolute_tolerance: null
