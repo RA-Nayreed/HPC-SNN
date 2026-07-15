@@ -1,30 +1,26 @@
 [build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
-
+requires=["hatchling"]
+build-backend="hatchling.build"
 [project]
-name = "fedapfa"
-version = "0.1.0"
-description = "Federated adaptive precision firing attention for SNNs"
-readme = "README.md"
-requires-python = ">=3.10"
-license = { text = "MIT" }
-authors = [{ name = "Rezwan Ahmad Nayreed", email = "RezwanAhmad.Nayreed@student.oulu.fi" }]
-dependencies = ["pyyaml>=6.0"]
-
+name="fedapfa"
+version="0.1.0"
+description="Federated adaptive parameter-free attention for spiking neural networks."
+readme="README.md"
+requires-python=">=3.10"
+dependencies=["torch>=2.1","numpy>=1.24","h5py>=3.9","pyyaml>=6.0","spikingjelly>=0.0.0.0.14"]
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "ruff>=0.6"]
-
+dev=["pytest>=8.0","ruff>=0.6"]
+dcls=[]
 [project.scripts]
-fedapfa-validate-config = "fedapfa.cli.validate_run:main"
-
+fedapfa-download-data="fedapfa.cli.download_dataset:main"
+fedapfa-inspect-data="fedapfa.cli.inspect_dataset:main"
+fedapfa-validate-config="fedapfa.cli.validate_run:main"
+fedapfa-train-centralized="fedapfa.cli.train_centralized:main"
 [tool.hatch.build.targets.wheel]
-packages = ["src/fedapfa"]
-
+packages=["src/fedapfa"]
 [tool.pytest.ini_options]
-testpaths = ["tests"]
-pythonpath = ["src"]
-
+testpaths=["tests"]
+pythonpath=["src"]
 [tool.ruff]
-line-length = 100
-target-version = "py310"
+line-length=100
+target-version="py310"

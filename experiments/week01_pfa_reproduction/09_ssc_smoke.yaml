@@ -1,10 +1,10 @@
-name: 04_pfa_equation
+name: 09_ssc_smoke
 seed: 7
-dataset: shd
+dataset: ssc
 model: lif_2layer
-classes: 20
+classes: 35
 input_features: 140
-attention: equation
+attention: none
 lambda: 0.01
 dropout: .4
 device: cpu

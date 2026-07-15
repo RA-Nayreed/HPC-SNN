@@ -1,18 +1,18 @@
-name: 04_pfa_equation
+name: 01_tiny_overfit
 seed: 7
 dataset: shd
 model: lif_2layer
 classes: 20
 input_features: 140
-attention: equation
+attention: none
 lambda: 0.01
-dropout: .4
+dropout: 0
 device: cpu
 protocol: thesis_clean
 validation_fraction: 0.1
 training:
-  batch_size: 32
-  epochs: 2
+  batch_size: 16
+  epochs: 50
   learning_rate: 0.001
   weight_decay: 0.0
   gradient_clip: 1.0

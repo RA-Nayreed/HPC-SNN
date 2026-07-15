@@ -1,1 +1,13 @@
-name: pending
+name: 06_lambda_sweep
+seed: 7
+dataset: shd
+model: lif_2layer
+classes: 20
+input_features: 140
+attention: equation
+lambda: 0.01
+lambda_sweep: [1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1]
+dropout: 0.4
+device: cpu
+protocol: thesis_clean
+training: {batch_size: 32, epochs: 2, learning_rate: 0.001, weight_decay: 0.0, gradient_clip: 1.0}
