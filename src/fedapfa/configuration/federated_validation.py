@@ -1,4 +1,4 @@
-"""Strict validation for the single-GPU SHD FedAvg reference."""
+"""Strict validation for federated scientific protocols."""
 
 from __future__ import annotations
 
@@ -17,6 +17,7 @@ REQUIRED_STREAMS = {
     "validation",
     "final_test",
 }
+PARTITION_METHODS = {"label_dirichlet", "stratified_iid"}
 
 
 def _section(config: Mapping[str, Any], key: str) -> Mapping[str, Any]:
@@ -33,18 +34,151 @@ def _positive_integer(value: Any, label: str) -> int:
 
 
 def _finite_positive(value: Any, label: str) -> float:
-    if (
-        not isinstance(value, (int, float))
-        or isinstance(value, bool)
-        or not math.isfinite(value)
-        or value <= 0
-    ):
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value <= 0:
         raise ConfigurationError(f"{label} must be finite and positive")
     return float(value)
 
 
+def _nonnegative(value: Any, label: str) -> float:
+    if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value) or value < 0:
+        raise ConfigurationError(f"{label} must be finite and nonnegative")
+    return float(value)
+
+
+def _validate_dataset_and_model(config: Mapping[str, Any]) -> None:
+    dataset = _section(config, "dataset")
+    model = _section(config, "model")
+    acceptance = _section(config, "acceptance")
+    dataset_name = dataset.get("name")
+    model_name = model.get("name")
+    if (dataset_name, model_name) == ("shd", "lif_2layer"):
+        expected_dataset = {
+            "train_file": "shd_train.h5",
+            "test_file": "shd_test.h5",
+            "validation_file": None,
+            "classes": 20,
+            "raw_channels": 700,
+            "input_features": 140,
+            "frequency_bin_factor": 5,
+            "temporal_bin_ms": 10.0,
+            "validation_fraction": 0.1,
+        }
+        for key, expected in expected_dataset.items():
+            if dataset.get(key) != expected:
+                raise ConfigurationError(f"dataset.{key} must be {expected!r}")
+        if model.get("hidden_dims") != [256, 256]:
+            raise ConfigurationError("SHD federated evaluation requires hidden_dims [256, 256]")
+        if (
+            model.get("dropout") != 0.4
+            or model.get("batch_normalization") is not False
+            or model.get("bias") is not True
+        ):
+            raise ConfigurationError("SHD federated evaluation requires dropout 0.4, no batch normalization, and bias")
+        attention = _section(model, "attention")
+        if attention.get("variant") != "none":
+            raise ConfigurationError("SHD federated evaluation requires no PfA attention; variant must be none")
+        neuron = _section(model, "neuron")
+        surrogate = _section(neuron, "surrogate")
+        expected_neuron = {
+            "name": "spikingjelly_lif",
+            "tau_ms": 10.05,
+            "threshold": 1.0,
+            "reset": "subtract",
+            "detach_reset": True,
+        }
+        for key, expected in expected_neuron.items():
+            if neuron.get(key) != expected:
+                raise ConfigurationError(f"model.neuron.{key} must be {expected!r}")
+        if surrogate.get("name") != "atan" or surrogate.get("alpha") != 5.0:
+            raise ConfigurationError("SHD federated evaluation requires ATan surrogate alpha 5")
+        if acceptance.get("expected_model_class") != "AudioLIFSNN":
+            raise ConfigurationError("acceptance.expected_model_class must be AudioLIFSNN")
+    elif (dataset_name, model_name) == ("cifar10", "svgg9_bntt"):
+        expected_dataset = {
+            "classes": 10,
+            "channels": 3,
+            "image_size": 32,
+            "validation_fraction": 0.1,
+            "standard_train_split": True,
+            "standard_test_split": True,
+            "download_during_training": False,
+        }
+        for key, expected in expected_dataset.items():
+            if dataset.get(key) != expected:
+                raise ConfigurationError(f"dataset.{key} must be {expected!r}")
+        transforms = _section(dataset, "transforms")
+        if transforms.get("image_size") != 32 or transforms.get("normalization") != "scale_0_1":
+            raise ConfigurationError("CIFAR-10 transforms require 32x32 scale_0_1 inputs")
+        augmentation = _section(transforms, "augmentation")
+        if (
+            augmentation.get("random_crop") is not True
+            or augmentation.get("crop_padding") != 4
+            or augmentation.get("horizontal_flip") is not True
+            or augmentation.get("horizontal_flip_probability") != 0.5
+        ):
+            raise ConfigurationError("CIFAR-10 deterministic augmentation settings are incomplete")
+        if model.get("channels") != [64, 64, 128, 128, 256, 256, 256]:
+            raise ConfigurationError("S-VGG9 BNTT channel layout is incompatible")
+        if model.get("average_pool_after_convolution") != [2, 4, 7] or model.get("linear_hidden") != 1024:
+            raise ConfigurationError("S-VGG9 BNTT pooling or linear layout is incompatible")
+        if _positive_integer(model.get("timesteps"), "model.timesteps") != 25:
+            raise ConfigurationError("S-VGG9 BNTT requires 25 configured timesteps")
+        if model.get("leak") != 0.95 or model.get("threshold") != 1.0 or model.get("surrogate_scale") != 0.3:
+            raise ConfigurationError("S-VGG9 BNTT neuron assumptions are incompatible")
+        _finite_positive(model.get("bntt_momentum"), "model.bntt_momentum")
+        _finite_positive(model.get("bntt_epsilon"), "model.bntt_epsilon")
+        if acceptance.get("expected_model_class") != "SVGG9BNTT":
+            raise ConfigurationError("acceptance.expected_model_class must be SVGG9BNTT")
+    elif dataset_name == "shd":
+        raise ConfigurationError("SHD cannot be paired with S-VGG9 BNTT")
+    elif dataset_name == "cifar10":
+        raise ConfigurationError("CIFAR-10 cannot be paired with AudioLIFSNN")
+    else:
+        raise ConfigurationError(f"unsupported federated dataset/model combination: {(dataset_name, model_name)}")
+    if not isinstance(dataset.get("root"), str) or not dataset["root"]:
+        raise ConfigurationError("dataset.root must be a path string")
+
+
+def _validate_optimizer(federation: Mapping[str, Any], protocol: str) -> None:
+    optimizer = federation.get("optimizer")
+    learning_rate = _finite_positive(federation.get("learning_rate"), "federated.learning_rate")
+    _nonnegative(federation.get("weight_decay"), "federated.weight_decay")
+    gradient_clip = federation.get("gradient_clip")
+    if gradient_clip is not None:
+        _finite_positive(gradient_clip, "federated.gradient_clip")
+    reductions = federation.get("learning_rate_reduction_rounds")
+    if not isinstance(reductions, list) or any(
+        not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in reductions
+    ):
+        raise ConfigurationError("federated.learning_rate_reduction_rounds must be a list of positive integers")
+    if reductions != sorted(set(reductions)):
+        raise ConfigurationError("learning-rate reduction rounds must be sorted and unique")
+    factor = _finite_positive(
+        federation.get("learning_rate_reduction_factor"), "federated.learning_rate_reduction_factor"
+    )
+    if optimizer == "adam":
+        if protocol == "published_protocol":
+            raise ConfigurationError("published Fed-SNN protocol requires SGD")
+        if "momentum" in federation and federation.get("momentum") is not None:
+            raise ConfigurationError("momentum cannot be configured for Adam")
+        if reductions or factor != 1.0:
+            raise ConfigurationError("Adam evaluations do not use learning-rate reductions")
+    elif optimizer == "sgd":
+        _nonnegative(federation.get("momentum"), "federated.momentum")
+        if not reductions or factor <= 1:
+            raise ConfigurationError("SGD published protocol requires a reduction schedule")
+    else:
+        raise ConfigurationError(f"unsupported federated optimizer: {optimizer}")
+    if protocol == "independent_evaluation" and (optimizer != "adam" or learning_rate != 0.001):
+        raise ConfigurationError("SHD independent evaluation requires Adam at learning rate 0.001")
+    if protocol == "published_protocol" and (
+        optimizer != "sgd" or learning_rate != 0.1 or federation.get("momentum") != 0.95
+    ):
+        raise ConfigurationError("published Fed-SNN protocol requires SGD, learning rate 0.1, and momentum 0.95")
+
+
 def validate_federated_config(config: Mapping[str, Any]) -> None:
-    """Reject configurations outside the scientifically fixed FedAvg reference."""
+    """Reject incomplete or scientifically incompatible federated configurations."""
 
     for key in (
         "name",
@@ -62,6 +196,7 @@ def validate_federated_config(config: Mapping[str, Any]) -> None:
         "federated",
         "seed_streams",
         "acceptance",
+        "provenance",
     ):
         if key not in config:
             raise ConfigurationError(f"missing required setting: {key}")
@@ -69,160 +204,151 @@ def validate_federated_config(config: Mapping[str, Any]) -> None:
         raise ConfigurationError("name must be a non-empty string")
     if not isinstance(config["seed"], int) or isinstance(config["seed"], bool):
         raise ConfigurationError("seed must be an integer")
-    if config["mode"] != "scientific_evaluation":
-        raise ConfigurationError("federated reference requires mode: scientific_evaluation")
-    if config["execution"] != "federated":
-        raise ConfigurationError("execution must be federated")
-    if config["protocol"] != "independent_evaluation":
-        raise ConfigurationError("federated reference requires independent_evaluation")
-    if config["device"] not in {"cpu", "cuda"}:
-        raise ConfigurationError("device must be cpu or cuda")
+    if config["mode"] != "scientific_evaluation" or config["execution"] != "federated":
+        raise ConfigurationError("federated protocol requires scientific_evaluation and federated execution")
+    if config["protocol"] not in {"independent_evaluation", "published_protocol"}:
+        raise ConfigurationError("unsupported federated scientific protocol")
+    if config["device"] != "cuda":
+        raise ConfigurationError("scientific federated configurations require CUDA")
     if not isinstance(config["output_root"], str) or not config["output_root"]:
         raise ConfigurationError("output_root must be a path string")
     if not isinstance(config["pairing_group"], str) or not config["pairing_group"]:
-        raise ConfigurationError("pairing_group must identify paired experiments")
-
-    dataset = _section(config, "dataset")
-    expected_dataset = {
-        "name": "shd",
-        "train_file": "shd_train.h5",
-        "test_file": "shd_test.h5",
-        "validation_file": None,
-        "classes": 20,
-        "raw_channels": 700,
-        "input_features": 140,
-        "frequency_bin_factor": 5,
-        "temporal_bin_ms": 10.0,
-        "validation_fraction": 0.1,
-    }
-    for key, expected in expected_dataset.items():
-        if dataset.get(key) != expected:
-            raise ConfigurationError(f"dataset.{key} must be {expected!r}")
-    if not isinstance(dataset.get("root"), str) or not dataset["root"]:
-        raise ConfigurationError("dataset.root must be a path string")
-
-    model = _section(config, "model")
-    if model.get("name") != "lif_2layer" or model.get("hidden_dims") != [256, 256]:
-        raise ConfigurationError("federated reference requires the 256/256 lif_2layer model")
-    if model.get("dropout") != 0.4 or model.get("batch_normalization") is not False or model.get("bias") is not True:
-        raise ConfigurationError("federated reference requires dropout 0.4, no batch normalization, and bias")
-    attention = _section(model, "attention")
-    if attention.get("variant") != "none":
-        raise ConfigurationError("DCLS and PfA mechanisms are unsupported in the FedAvg reference")
-    neuron = _section(model, "neuron")
-    surrogate = _section(neuron, "surrogate")
-    expected_neuron = {
-        "name": "spikingjelly_lif",
-        "tau_ms": 10.05,
-        "threshold": 1.0,
-        "reset": "subtract",
-        "detach_reset": True,
-    }
-    for key, expected in expected_neuron.items():
-        if neuron.get(key) != expected:
-            raise ConfigurationError(f"model.neuron.{key} must be {expected!r}")
-    if surrogate.get("name") != "atan" or surrogate.get("alpha") != 5.0:
-        raise ConfigurationError("federated reference requires ATan surrogate alpha 5")
+        raise ConfigurationError("pairing_group must identify comparable executions")
+    _validate_dataset_and_model(config)
 
     subset = _section(config, "subset")
     if any(subset.get(key) != 0 for key in ("train_examples", "validation_examples", "test_examples")):
-        raise ConfigurationError("scientific federated evaluation requires complete eligible dataset splits")
+        raise ConfigurationError("scientific federated evaluation prohibits dataset caps")
     if subset.get("stratified") is not True:
-        raise ConfigurationError("SHD validation selection must be stratified")
+        raise ConfigurationError("validation selection must be stratified")
     training = _section(config, "training")
-    batch_limit_keys = ("max_train_batches", "max_validation_batches", "max_test_batches")
-    if any(training.get(key) is not None for key in batch_limit_keys):
-        raise ConfigurationError("scientific federated evaluation does not permit batch limits")
+    if any(
+        training.get(key) is not None for key in ("max_train_batches", "max_validation_batches", "max_test_batches")
+    ):
+        raise ConfigurationError("scientific federated evaluation prohibits batch caps")
 
     federation = _section(config, "federated")
     if federation.get("algorithm") != "fedavg":
         raise ConfigurationError("unsupported federated algorithm")
     clients = _positive_integer(federation.get("clients"), "federated.clients")
     if clients < 2:
-        raise ConfigurationError("federated.clients must be at least two")
+        raise ConfigurationError("federated.clients must contain at least two clients")
     rounds = _positive_integer(federation.get("rounds"), "federated.rounds")
-    if rounds != 100:
-        raise ConfigurationError("scientific federated evaluation requires 100 communication rounds")
-    if _positive_integer(federation.get("local_epochs"), "federated.local_epochs") != 1:
-        raise ConfigurationError("federated.local_epochs must be one")
-    if _positive_integer(federation.get("local_batch_size"), "federated.local_batch_size") != 32:
-        raise ConfigurationError("federated.local_batch_size must be 32")
-    if federation.get("optimizer") != "adam":
-        raise ConfigurationError("federated optimizer must be adam")
-    if _finite_positive(federation.get("learning_rate"), "federated.learning_rate") != 0.001:
-        raise ConfigurationError("federated.learning_rate must be 0.001")
-    if federation.get("weight_decay") != 0.0:
-        raise ConfigurationError("federated.weight_decay must be zero")
-    if _finite_positive(federation.get("gradient_clip"), "federated.gradient_clip") != 1.0:
-        raise ConfigurationError("federated.gradient_clip must be one")
-    if federation.get("learning_rate_scheduler") is not None:
-        raise ConfigurationError("learning-rate scheduling is unsupported")
-    if federation.get("client_sampling") != "without_replacement":
-        raise ConfigurationError("client sampling must be without replacement")
-    if federation.get("retain_optimizer_state") is not False:
-        raise ConfigurationError("client optimizer state must not persist")
-    if federation.get("official_test_evaluation_during_rounds") is not False:
-        raise ConfigurationError("official-test evaluation during communication rounds is prohibited")
-
+    selected = _positive_integer(federation.get("clients_per_round"), "federated.clients_per_round")
+    if selected > clients:
+        raise ConfigurationError("federated.clients_per_round cannot exceed federated.clients")
     participation = federation.get("participation_fraction")
     if (
         not isinstance(participation, (int, float))
         or isinstance(participation, bool)
         or not math.isfinite(participation)
-        or not 0 < participation <= 1
     ):
-        raise ConfigurationError("federated.participation_fraction must be in (0, 1]")
-    selected = _positive_integer(federation.get("clients_per_round"), "federated.clients_per_round")
-    calculated = clients * float(participation)
-    if not calculated.is_integer() or selected != int(calculated):
-        raise ConfigurationError("participation must produce the configured integer client count")
-    if selected > clients:
-        raise ConfigurationError("selected-client count exceeds total clients")
-    if float(participation) not in {0.25, 0.5} or selected not in {5, 10}:
-        raise ConfigurationError("reference participation must be 0.25 or 0.50")
+        raise ConfigurationError("federated.participation_fraction must be finite and in (0, 1]")
+    if not 0 < float(participation) <= 1 or not math.isclose(
+        float(participation), selected / clients, rel_tol=0.0, abs_tol=1e-12
+    ):
+        raise ConfigurationError(
+            "federated.participation_fraction is inconsistent with clients_per_round; it must be in (0, 1]"
+        )
+    local_epochs = _positive_integer(federation.get("local_epochs"), "federated.local_epochs")
+    batch_size = _positive_integer(federation.get("local_batch_size"), "federated.local_batch_size")
+    if rounds != 100:
+        raise ConfigurationError("scientific federated protocols require 100 communication rounds")
+    if federation.get("client_sampling") != "without_replacement":
+        raise ConfigurationError("client sampling must be deterministic without replacement")
+    if federation.get("retain_optimizer_state") is not False:
+        raise ConfigurationError("client optimizer state must not persist")
+    if federation.get("official_test_evaluation_during_rounds") is not False:
+        raise ConfigurationError("official-test monitoring during training is prohibited")
+    if not isinstance(federation.get("record_extended_diagnostics"), bool):
+        raise ConfigurationError("federated.record_extended_diagnostics must be boolean")
+    _validate_optimizer(federation, config["protocol"])
+
+    if config["protocol"] == "independent_evaluation":
+        if config["dataset"]["name"] != "shd":
+            raise ConfigurationError("independent federated evaluation is defined for SHD")
+        if (clients, selected, local_epochs, batch_size) not in {(20, 10, 1, 32), (20, 5, 1, 32)}:
+            raise ConfigurationError("SHD federated client, participation, epoch, or batch settings are incompatible")
+        if federation.get("weight_decay") != 0.0 or federation.get("gradient_clip") != 1.0:
+            raise ConfigurationError("SHD independent evaluation requires zero weight decay and clipping 1.0")
+    else:
+        if config["dataset"]["name"] != "cifar10":
+            raise ConfigurationError("published Fed-SNN protocol is defined for CIFAR-10")
+        if (clients, selected, local_epochs, batch_size) != (10, 2, 5, 32):
+            raise ConfigurationError(
+                "published Fed-SNN client, participation, epoch, or batch settings are incompatible"
+            )
+        if federation.get("learning_rate_reduction_rounds") != [40, 60, 80]:
+            raise ConfigurationError("published Fed-SNN reduction rounds must be [40, 60, 80]")
+        if federation.get("learning_rate_reduction_factor") != 5:
+            raise ConfigurationError("published Fed-SNN reduction factor must be 5")
+        assumptions = config.get("protocol_assumptions")
+        if (
+            not isinstance(assumptions, list)
+            or not assumptions
+            or any(not isinstance(value, str) or not value for value in assumptions)
+        ):
+            raise ConfigurationError("published protocol requires explicit protocol_assumptions")
 
     partition = _section(federation, "partition")
-    if partition.get("method") != "label_dirichlet":
-        raise ConfigurationError("partition method must be label_dirichlet")
-    if _finite_positive(partition.get("alpha"), "federated.partition.alpha") != 0.5:
-        raise ConfigurationError("Dirichlet alpha must be 0.5")
-    if _positive_integer(
-        partition.get("minimum_examples_per_client"), "federated.partition.minimum_examples_per_client"
-    ) != 32:
-        raise ConfigurationError("minimum client size must be 32")
-    _positive_integer(partition.get("maximum_attempts"), "federated.partition.maximum_attempts")
+    method = partition.get("method")
+    if method not in PARTITION_METHODS:
+        raise ConfigurationError(f"unknown partition method: {method}")
+    _positive_integer(partition.get("minimum_examples_per_client"), "federated.partition.minimum_examples_per_client")
+    if method == "stratified_iid":
+        if partition.get("alpha") is not None:
+            raise ConfigurationError("stratified_iid configurations cannot set alpha")
+    else:
+        _finite_positive(partition.get("alpha"), "federated.partition.alpha")
+        _positive_integer(partition.get("maximum_attempts"), "federated.partition.maximum_attempts")
 
-    if not isinstance(federation.get("data_loader_workers"), int) or federation["data_loader_workers"] < 0:
+    workers = federation.get("data_loader_workers")
+    if not isinstance(workers, int) or workers < 0:
         raise ConfigurationError("federated.data_loader_workers must be a non-negative integer")
     if not isinstance(federation.get("persistent_workers"), bool):
         raise ConfigurationError("federated.persistent_workers must be boolean")
-    if federation["persistent_workers"] and federation["data_loader_workers"] == 0:
+    if federation["persistent_workers"] and workers == 0:
         raise ConfigurationError("persistent workers require at least one data-loader worker")
-
     communication = _section(federation, "communication")
-    if communication.get("model_downloads_per_selected_client") != 1:
-        raise ConfigurationError("one model download per selected client is required")
-    if communication.get("model_uploads_per_selected_client") != 1:
-        raise ConfigurationError("one model upload per selected client is required")
     if (
-        communication.get("include_optimizer_state") is not False
+        communication.get("model_downloads_per_selected_client") != 1
+        or communication.get("model_uploads_per_selected_client") != 1
+        or communication.get("include_optimizer_state") is not False
         or communication.get("include_dataset_transfer") is not False
     ):
-        raise ConfigurationError("logical communication excludes optimizer state and dataset transfer")
+        raise ConfigurationError("logical communication configuration is incompatible")
 
     streams = _section(config, "seed_streams")
-    if set(streams) != REQUIRED_STREAMS:
+    if set(streams) != REQUIRED_STREAMS or any(not isinstance(value, str) or not value for value in streams.values()):
         raise ConfigurationError(f"seed_streams must contain exactly {sorted(REQUIRED_STREAMS)}")
-    if any(not isinstance(value, str) or not value for value in streams.values()):
-        raise ConfigurationError("seed stream identities must be non-empty strings")
     if len(set(streams.values())) != len(streams):
         raise ConfigurationError("seed stream identities must be distinct")
+    provenance = _section(config, "provenance")
+    if any(
+        provenance.get(key) is not True
+        for key in (
+            "require_git_commit",
+            "require_dataset_identity",
+            "require_split_identity",
+            "require_partition_identity",
+            "require_model_initialization_identity",
+        )
+    ):
+        raise ConfigurationError("all federated provenance requirements must be enabled")
 
     acceptance = _section(config, "acceptance")
-    if acceptance.get("expected_model_class") != "AudioLIFSNN":
-        raise ConfigurationError("acceptance.expected_model_class must be AudioLIFSNN")
-    if acceptance.get("reference_test_accuracy") is not None or acceptance.get("absolute_tolerance") is not None:
-        raise ConfigurationError("the FedAvg reference has no verified reproduction target")
+    reference = acceptance.get("reference_test_accuracy")
+    tolerance = acceptance.get("absolute_tolerance")
+    if reference is None:
+        if tolerance is not None:
+            raise ConfigurationError("acceptance.absolute_tolerance must be null when reference accuracy is null")
+    else:
+        if not isinstance(reference, (int, float)) or not 0 <= reference <= 1:
+            raise ConfigurationError("acceptance.reference_test_accuracy must be in [0, 1]")
+        if not isinstance(tolerance, (int, float)) or not 0 <= tolerance <= 1:
+            raise ConfigurationError("acceptance.absolute_tolerance must be in [0, 1]")
+    if config["protocol"] == "independent_evaluation" and reference is not None:
+        raise ConfigurationError("independent evaluation cannot configure a paper accuracy target")
 
 
 def paired_configuration_identity(config: Mapping[str, Any]) -> dict[str, Any]:

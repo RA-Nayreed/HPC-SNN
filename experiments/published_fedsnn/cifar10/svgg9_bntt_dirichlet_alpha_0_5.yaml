@@ -1,0 +1,26 @@
+include:
+  - ../../../configs/base/centralized.yaml
+  - ../../../configs/datasets/cifar10_published_protocol.yaml
+  - ../../../configs/models/svgg9_bntt.yaml
+  - ../../../configs/federated/published_fedsnn.yaml
+name: cifar10_svgg9_bntt_dirichlet_alpha_0_5
+mode: scientific_evaluation
+execution: federated
+protocol: published_protocol
+device: cuda
+output_root: runs/published_fedsnn
+pairing_group: cifar10_svgg9_bntt_dirichlet_alpha_0_5
+protocol_assumptions:
+  - Reduction locations are interpreted as communication-round boundaries after rounds 40, 60, and 80.
+  - Seven convolution channels are 64, 64, 128, 128, 256, 256, and 256, with average pooling after layers 2, 4, and 7.
+  - The first linear layer has 1024 units.
+  - The LIF leak is 0.95 and threshold is 1.0.
+  - Inputs are scaled to the unit interval with crop padding 4 and horizontal flip probability 0.5.
+  - Weight decay is zero and gradient clipping is disabled.
+metadata:
+  experiment: cifar10_svgg9_bntt_dirichlet_alpha_0_5
+  purpose: independent_published_protocol
+acceptance:
+  expected_model_class: SVGG9BNTT
+  reference_test_accuracy: null
+  absolute_tolerance: null

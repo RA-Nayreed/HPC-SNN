@@ -1,4 +1,4 @@
-"""Command-line entry point for one single-GPU SHD FedAvg execution."""
+"""Command-line entry point for one single-GPU federated scientific execution."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import shlex
 import sys
 
 from fedapfa.configuration import load_federated_config, validate_federated_config
+from fedapfa.datasets.cifar10 import prepare_federated_cifar10
 from fedapfa.federated.data_protocol import prepare_federated_shd
 from fedapfa.training.centralized import resolve_device
 from fedapfa.training.federated import make_initialized_federated_model, train_federated
@@ -29,7 +30,7 @@ def _override(config: dict, args: argparse.Namespace) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train one single-GPU SHD FedAvg scientific evaluation.")
+    parser = argparse.ArgumentParser(description="Train one single-GPU federated scientific evaluation.")
     parser.add_argument("config")
     parser.add_argument("--data-root")
     parser.add_argument("--output-root")
@@ -46,7 +47,11 @@ def main() -> None:
         print(f"completed federated execution already exists; skipping: {action.run_dir}")
         return
     resolve_device(config["device"])
-    bundle = prepare_federated_shd(config)
+    bundle = (
+        prepare_federated_shd(config)
+        if config["dataset"]["name"] == "shd"
+        else prepare_federated_cifar10(config)
+    )
     model = make_initialized_federated_model(config)
     run_dir = initialize_run(
         config,

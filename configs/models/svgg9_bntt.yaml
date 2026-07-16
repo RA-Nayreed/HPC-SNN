@@ -1,0 +1,11 @@
+model:
+  name: svgg9_bntt
+  channels: [64, 64, 128, 128, 256, 256, 256]
+  average_pool_after_convolution: [2, 4, 7]
+  linear_hidden: 1024
+  timesteps: 25
+  leak: 0.95
+  threshold: 1.0
+  surrogate_scale: 0.3
+  bntt_momentum: 0.1
+  bntt_epsilon: 0.00001

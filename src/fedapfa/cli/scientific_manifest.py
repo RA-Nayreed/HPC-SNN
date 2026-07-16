@@ -1,0 +1,82 @@
+"""Shell-facing validation and expansion for federated scientific manifests."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import yaml
+
+from fedapfa.configuration import (
+    load_heterogeneity_context_tasks,
+    load_heterogeneity_manifest,
+    load_published_fedsnn_manifest,
+)
+
+
+def _collection(path: str) -> str:
+    value = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
+    if not isinstance(value, dict) or not isinstance(value.get("collection"), str):
+        raise ValueError("manifest collection is missing")
+    return value["collection"]
+
+
+def _tasks(path: str):
+    collection = _collection(path)
+    if collection == "heterogeneity_evaluation":
+        return load_heterogeneity_manifest(path)
+    if collection == "published_fedsnn":
+        return load_published_fedsnn_manifest(path)
+    raise ValueError(f"unsupported scientific collection: {collection}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Validate and expand a federated scientific manifest.")
+    parser.add_argument(
+        "action",
+        choices=("validate", "count", "task", "context-count", "context-task"),
+    )
+    parser.add_argument("--manifest", required=True)
+    parser.add_argument("--index", type=int)
+    args = parser.parse_args()
+    context_action = args.action.startswith("context-")
+    values = load_heterogeneity_context_tasks(args.manifest) if context_action else _tasks(args.manifest)
+    if args.action == "validate":
+        print(
+            json.dumps(
+                {
+                    "collection": _collection(args.manifest),
+                    "task_count": len(values),
+                    "seeds": sorted({value.seed for value in values}),
+                    "experiments": list(dict.fromkeys(value.experiment for value in values)),
+                },
+                sort_keys=True,
+            )
+        )
+    elif args.action in {"count", "context-count"}:
+        print(len(values))
+    else:
+        if args.index is None or not 0 <= args.index < len(values):
+            parser.error(f"--index must be between 0 and {len(values) - 1}")
+        value = values[args.index]
+        if context_action:
+            print("\t".join((str(value.seed), value.experiment, value.source_record["run_directory"])))
+        else:
+            print(
+                "\t".join(
+                    (
+                        str(value.config_path),
+                        str(value.seed),
+                        value.dataset,
+                        value.mode,
+                        value.protocol,
+                        value.experiment,
+                        str(value.config["federated"]["participation_fraction"]),
+                    )
+                )
+            )
+
+
+if __name__ == "__main__":
+    main()

@@ -12,6 +12,7 @@ import numpy as np
 from fedapfa.configuration.validation import resolve_dataset_paths
 from fedapfa.datasets.centralized_split import stratified_split
 from fedapfa.datasets.dirichlet_partition import DirichletPartition, label_dirichlet_partition
+from fedapfa.datasets.iid_partition import StratifiedIIDPartition, stratified_iid_partition
 from fedapfa.datasets.shd import EventAudioDataset
 from fedapfa.federated.randomness import resolved_seeds
 from fedapfa.utilities.serialization import sha256_json
@@ -44,7 +45,7 @@ class FederatedSHDBundle:
     train_indices: np.ndarray
     validation_indices: np.ndarray
     validation_dataset: EventAudioDataset
-    partition: DirichletPartition
+    partition: DirichletPartition | StratifiedIIDPartition
     split_artifact: dict
     resolved_seed_values: dict[str, int]
     official_test_access_count: int = 0
@@ -96,17 +97,25 @@ def prepare_federated_shd(config: dict) -> FederatedSHDBundle:
     split_artifact = dict(split_core)
     split_artifact["split_id"] = sha256_json(split_core)
     partition_config = config["federated"]["partition"]
-    partition = label_dirichlet_partition(
-        labels=labels,
-        eligible_indices=train_indices,
-        clients=config["federated"]["clients"],
-        alpha=partition_config["alpha"],
-        minimum_size=partition_config["minimum_examples_per_client"],
-        seed=seeds["partition"],
-        maximum_attempts=partition_config["maximum_attempts"],
-        validation_split_id=split_artifact["split_id"],
-        dataset_identity=dataset_identity,
-    )
+    common_partition = {
+        "labels": labels,
+        "eligible_indices": train_indices,
+        "clients": config["federated"]["clients"],
+        "minimum_size": partition_config["minimum_examples_per_client"],
+        "seed": seeds["partition"],
+        "validation_split_id": split_artifact["split_id"],
+        "dataset_identity": dataset_identity,
+    }
+    if partition_config["method"] == "label_dirichlet":
+        partition = label_dirichlet_partition(
+            **common_partition,
+            alpha=partition_config["alpha"],
+            maximum_attempts=partition_config["maximum_attempts"],
+        )
+    elif partition_config["method"] == "stratified_iid":
+        partition = stratified_iid_partition(**common_partition)
+    else:
+        raise ValueError(f"unsupported partition method: {partition_config['method']}")
     validation = EventAudioDataset(
         train_path,
         validation_indices,

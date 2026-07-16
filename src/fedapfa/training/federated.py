@@ -6,6 +6,7 @@ import json
 import logging
 import math
 import random
+import statistics
 import time
 from pathlib import Path
 
@@ -27,6 +28,7 @@ from fedapfa.federated.fedavg import aggregate_client_results
 from fedapfa.federated.randomness import derive_seed, resolved_seeds
 from fedapfa.federated.round_state import RoundResult
 from fedapfa.federated.server import global_model_norm, validate_global_model
+from fedapfa.metrics.client_fairness import fairness_proxy_record
 from fedapfa.models.model_factory import make_model
 from fedapfa.training.centralized import resolve_device
 from fedapfa.utilities.serialization import atomic_write_json, atomic_write_text
@@ -208,11 +210,11 @@ def train_federated(
 
         synchronize_cuda(device)
         aggregation_started = time.monotonic()
-        weights, aggregated_update_norm = aggregate_client_results(model, local_results)
+        weights, aggregated_update_norm, update_cosines = aggregate_client_results(model, local_results)
         synchronize_cuda(device)
         aggregation_time = time.monotonic() - aggregation_started
-        for result, weight in zip(local_results, weights, strict=True):
-            client_records.append(result.record(weight))
+        for result, weight, cosine in zip(local_results, weights, update_cosines, strict=True):
+            client_records.append(result.record(weight, cosine))
 
         validation_seed = derive_seed(
             config["seed"], config["seed_streams"]["validation"], round_number
@@ -240,6 +242,8 @@ def train_federated(
         cumulative_upload += communication["upload_bytes"]
         synchronize_cuda(device)
         total_round_time = time.monotonic() - round_started
+        update_norms = [result.update_l2_norm for result in local_results]
+        client_peak_memory = [result.peak_cuda_memory_bytes for result in local_results]
         round_result = RoundResult(
             round_number=round_number,
             selected_client_ids=selected,
@@ -248,9 +252,17 @@ def train_federated(
             total_selected_examples=sum(result.example_count for result in local_results),
             validation_loss=validation.loss,
             validation_accuracy=validation.accuracy,
+            validation_macro_f1=validation.macro_f1,
+            validation_per_class_accuracy=validation.per_class_accuracy,
+            validation_confusion_matrix=validation.confusion_matrix,
             validation_spike_rates=validation.spike_rates,
             global_model_l2_norm=global_model_norm(model),
             aggregated_update_l2_norm=aggregated_update_norm,
+            mean_client_update_l2_norm=statistics.mean(update_norms),
+            standard_deviation_client_update_l2_norm=statistics.pstdev(update_norms),
+            mean_client_to_aggregate_cosine_similarity=statistics.mean(update_cosines),
+            minimum_client_to_aggregate_cosine_similarity=min(update_cosines),
+            maximum_client_to_aggregate_cosine_similarity=max(update_cosines),
             client_training_time_seconds=client_training_time,
             aggregation_time_seconds=aggregation_time,
             validation_time_seconds=validation_time,
@@ -261,6 +273,11 @@ def train_federated(
             cumulative_logical_download_bytes=cumulative_download,
             cumulative_logical_upload_bytes=cumulative_upload,
             cumulative_logical_communication_bytes=cumulative_download + cumulative_upload,
+            peak_cuda_memory_bytes=(
+                max([value for value in [*client_peak_memory, validation.peak_cuda_memory_bytes] if value is not None])
+                if device.type == "cuda"
+                else None
+            ),
             current_best_validation_round=best_round,
             selected_checkpoint=improved,
         )
@@ -332,6 +349,7 @@ def train_federated(
                 "evaluation_completed": False,
                 "complete_split": None,
                 "metrics": None,
+                "dataset_identity": None,
             },
         )
         test_dataset = bundle.official_test_dataset(model_selected=True)
@@ -352,9 +370,14 @@ def train_federated(
             "evaluation_completed": True,
             "complete_split": True,
             "metrics": final_test.__dict__,
+            "dataset_identity": getattr(bundle, "official_test_identity", None),
         }
         atomic_write_json(official_path, official_record)
     test_metrics = official_record["metrics"]
+    selected_validation = round_records[best_round - 1]
+    fairness_proxy = fairness_proxy_record(
+        selected_validation["validation_per_class_accuracy"], bundle.partition.artifact
+    )
     final = {
         "schema_version": 1,
         "accepted": False,
@@ -363,6 +386,15 @@ def train_federated(
         "best_validation_accuracy": best_accuracy,
         "selected_round": best_round,
         "final_validation_accuracy": round_records[-1]["validation_accuracy"],
+        "selected_validation": {
+            "loss": selected_validation["validation_loss"],
+            "accuracy": selected_validation["validation_accuracy"],
+            "macro_f1": selected_validation["validation_macro_f1"],
+            "per_class_accuracy": selected_validation["validation_per_class_accuracy"],
+            "confusion_matrix": selected_validation["validation_confusion_matrix"],
+            "spike_rates": selected_validation["validation_spike_rates"],
+        },
+        "client_distribution_weighted_validation_accuracy": fairness_proxy,
         "test": test_metrics,
         "model_class": type(model).__name__,
         "parameter_count": sum(parameter.numel() for parameter in model.parameters() if parameter.requires_grad),
@@ -387,6 +419,16 @@ def train_federated(
         "mean_client_update_l2_norm": sum(record["update_l2_norm"] for record in client_records)
         / len(client_records),
         "mean_client_spike_rates": _mean_client_spike_rates(client_records),
+        "mean_client_update_cosine_similarity": statistics.mean(
+            record["update_cosine_similarity"] for record in client_records
+        ),
+        "peak_cuda_memory_bytes": (
+            max(record["peak_cuda_memory_bytes"] for record in round_records)
+            if config["device"] == "cuda"
+            else None
+        ),
+        "dataset_identity": bundle.split_artifact.get("dataset_identity"),
+        "protocol_assumptions": config.get("protocol_assumptions", []),
         "termination": {"reason": "communication_rounds_completed", "configured_rounds": rounds},
     }
     atomic_write_json(path / "final_metrics.json", final)

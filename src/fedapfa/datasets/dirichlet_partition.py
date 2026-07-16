@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-import math
-import statistics
 from dataclasses import dataclass
 
 import numpy as np
 
 from fedapfa.utilities.serialization import sha256_json
+
+from .partition_diagnostics import partition_diagnostics
 
 
 @dataclass(frozen=True)
@@ -19,13 +19,6 @@ class DirichletPartition:
     @property
     def client_indices(self) -> dict[str, list[int]]:
         return {client["client_id"]: list(client["indices"]) for client in self.artifact["clients"]}
-
-
-def _entropy_bits(class_counts: dict[str, int]) -> float:
-    total = sum(class_counts.values())
-    if total <= 0:
-        return 0.0
-    return -sum((count / total) * math.log2(count / total) for count in class_counts.values() if count)
 
 
 def _integrity(eligible: np.ndarray, clients: list[list[int]], minimum_size: int) -> dict[str, bool]:
@@ -88,32 +81,27 @@ def label_dirichlet_partition(
             f"after {maximum_attempts} attempts"
         )
 
+    diagnostic_records, diagnostic_statistics, complete_counts = partition_diagnostics(
+        assigned_clients, labels, eligible
+    )
     client_records = []
-    sizes = []
-    entropies = []
-    for client_index, indices in enumerate(assigned_clients):
+    for client_index, (indices, diagnostics) in enumerate(
+        zip(assigned_clients, diagnostic_records, strict=True)
+    ):
         ordered = sorted(indices)
-        counts = {
-            str(int(class_value)): int(np.sum(labels[np.asarray(ordered, dtype=np.int64)] == class_value))
-            for class_value in class_values
-        }
-        entropy = _entropy_bits(counts)
-        sizes.append(len(ordered))
-        entropies.append(entropy)
         client_records.append(
             {
                 "client_id": f"client_{client_index:02d}",
                 "indices": ordered,
                 "size": len(ordered),
-                "class_counts": counts,
-                "label_entropy_bits": entropy,
+                **diagnostics,
             }
         )
     integrity = _integrity(eligible, assigned_clients, minimum_size)
     if not all(integrity.values()):
         raise RuntimeError(f"constructed partition failed integrity checks: {integrity}")
     artifact = {
-        "schema_version": 1,
+        "schema_version": 2,
         "partition_seed": seed,
         "validation_split_id": validation_split_id,
         "dataset_identity": dataset_identity,
@@ -123,21 +111,9 @@ def label_dirichlet_partition(
         "minimum_examples_per_client": minimum_size,
         "construction_attempts": construction_attempts,
         "eligible_training_examples": len(eligible),
+        "complete_eligible_training_class_counts": complete_counts,
         "clients": client_records,
-        "client_size_statistics": {
-            "minimum": min(sizes),
-            "maximum": max(sizes),
-            "mean": statistics.mean(sizes),
-            "median": statistics.median(sizes),
-            "standard_deviation": statistics.pstdev(sizes),
-        },
-        "label_entropy_bits_statistics": {
-            "minimum": min(entropies),
-            "maximum": max(entropies),
-            "mean": statistics.mean(entropies),
-            "median": statistics.median(entropies),
-            "standard_deviation": statistics.pstdev(entropies),
-        },
+        "diagnostic_statistics": diagnostic_statistics,
         "integrity_checks": integrity,
     }
     partition_id = sha256_json(artifact)

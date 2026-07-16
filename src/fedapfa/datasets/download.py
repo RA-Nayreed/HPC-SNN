@@ -100,11 +100,24 @@ def _atomic_decompress(compressed: Path, output: Path) -> None:
         part.unlink(missing_ok=True)
 
 
+def _download_cifar10(root: str | Path) -> list[Path]:
+    from .cifar10 import _torchvision
+
+    datasets, _, _ = _torchvision()
+    destination = Path(root) / "cifar10"
+    destination.mkdir(parents=True, exist_ok=True)
+    datasets.CIFAR10(root=str(destination), train=True, download=True, transform=None)
+    datasets.CIFAR10(root=str(destination), train=False, download=True, transform=None)
+    return [destination]
+
+
 def download_dataset(
     dataset: str, root: str | Path = "data/raw", downloader: Callable[[str, Path], None] = _url_download
 ) -> list[Path]:
+    if dataset == "cifar10":
+        return _download_cifar10(root)
     if dataset not in DATASET_FILES:
-        raise ValueError("dataset must be shd or ssc")
+        raise ValueError("dataset must be shd, ssc, or cifar10")
     destination = Path(root) / dataset
     destination.mkdir(parents=True, exist_ok=True)
     with _file_lock(destination / ".download.lock"):

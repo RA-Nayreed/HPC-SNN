@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
-#SBATCH --job-name=shd-heterogeneity
+#SBATCH --job-name=published-fedsnn
 #SBATCH --partition=gpumedium
 #SBATCH --nodes=1
 #SBATCH --ntasks=1
 #SBATCH --cpus-per-task=8
 #SBATCH --gres=gpu:gh200:1
-#SBATCH --time=48:00:00
+#SBATCH --time=72:00:00
 
 set -euo pipefail
-
 : "${CSC_PROJECT:?CSC_PROJECT must be set}"
 : "${USER:?USER must be set}"
 : "${WORK:?WORK must be exported by the submission wrapper}"
@@ -21,14 +20,12 @@ case "${WORK}/" in
     "${scratch_prefix}"*) ;;
     *) echo "WORK must be under ${scratch_prefix}" >&2; exit 2 ;;
 esac
-
 module purge
 module load python-pytorch/2.10
 venv="${FEDAPFA_VENV:-/projappl/${CSC_PROJECT}/${USER}/hpc-snn-venv}"
 [[ -f "${venv}/bin/activate" ]] || { echo "missing virtual environment: ${venv}" >&2; exit 2; }
 source "${venv}/bin/activate"
 cd "${REPO_ROOT}"
-
 python3 - <<'PY'
 import torch
 if not torch.cuda.is_available():
@@ -38,21 +35,17 @@ PY
 nvidia-smi
 python3 -m fedapfa.cli.scientific_manifest validate --manifest "${MANIFEST}"
 task_count="$(python3 -m fedapfa.cli.scientific_manifest count --manifest "${MANIFEST}")"
-[[ "${task_count}" == "9" ]] || { echo "heterogeneity manifest must contain 9 tasks" >&2; exit 2; }
+[[ "${task_count}" == "3" ]] || { echo "published protocol manifest must contain 3 tasks" >&2; exit 2; }
 task="$(python3 -m fedapfa.cli.scientific_manifest task --manifest "${MANIFEST}" --index "${SLURM_ARRAY_TASK_ID}")"
 IFS=$'\t' read -r config seed dataset mode protocol experiment participation <<< "${task}"
-[[ "${dataset}" == "shd" && "${mode}" == "scientific_evaluation" && "${protocol}" == "independent_evaluation" ]] || {
-    echo "incompatible heterogeneity task" >&2; exit 2;
+[[ "${dataset}" == "cifar10" && "${mode}" == "scientific_evaluation" && "${protocol}" == "published_protocol" ]] || {
+    echo "incompatible published protocol task" >&2; exit 2;
 }
-[[ "${participation}" == "0.5" ]] || { echo "participation must be 0.50" >&2; exit 2; }
-
-data_root="${WORK}/data/shd"
-runs_root="${WORK}/runs/heterogeneity"
-telemetry_root="${WORK}/telemetry/heterogeneity"
+data_root="${WORK}/data/cifar10"
+runs_root="${WORK}/runs/published_fedsnn"
+telemetry_root="${WORK}/telemetry/published_fedsnn"
 mkdir -p "${runs_root}" "${telemetry_root}"
-[[ -f "${data_root}/shd_train.h5" && -f "${data_root}/shd_test.h5" ]] || {
-    echo "SHD files are unavailable under ${data_root}" >&2; exit 2;
-}
+[[ -f "${data_root}/cifar-10-batches-py/data_batch_1" ]] || { echo "CIFAR-10 training files are unavailable" >&2; exit 2; }
 job_label="${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID}}_${SLURM_ARRAY_TASK_ID}"
 telemetry="${telemetry_root}/${job_label}.csv"
 nvidia-smi --query-gpu=timestamp,index,uuid,name,utilization.gpu,utilization.memory,memory.used,memory.total,power.draw,temperature.gpu \
@@ -66,8 +59,7 @@ nvidia-smi --query-gpu=timestamp,index,uuid,name,utilization.gpu,utilization.mem
 ) &
 telemetry_pid=$!
 trap 'kill "${telemetry_pid}" 2>/dev/null || true; wait "${telemetry_pid}" 2>/dev/null || true' EXIT
-
 export OMP_NUM_THREADS="${SLURM_CPUS_PER_TASK}"
-echo "array=${SLURM_ARRAY_TASK_ID} experiment=${experiment} seed=${seed}"
+echo "array=${SLURM_ARRAY_TASK_ID} experiment=${experiment} seed=${seed} participation=${participation}"
 srun python3 -m fedapfa.cli.train_federated "${config}" \
     --seed "${seed}" --data-root "${data_root}" --output-root "${runs_root}" --resume-auto

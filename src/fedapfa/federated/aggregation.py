@@ -53,6 +53,41 @@ def state_difference_l2_norm(
     return result
 
 
+def state_difference_cosine_similarity(
+    client_state: dict[str, torch.Tensor],
+    server_state: dict[str, torch.Tensor],
+    aggregated_state: dict[str, torch.Tensor],
+) -> float:
+    """Compare a client update with the aggregated update; zero norms map to zero."""
+
+    if set(client_state) != set(server_state) or set(client_state) != set(aggregated_state):
+        raise ValueError("state dictionaries have incompatible keys")
+    dot_product = client_squared = aggregate_squared = 0.0
+    for name, client_value in client_state.items():
+        server_value = server_state[name]
+        aggregate_value = aggregated_state[name]
+        if client_value.shape != server_value.shape or client_value.shape != aggregate_value.shape:
+            raise ValueError(f"state tensor {name} is incompatible")
+        if client_value.is_floating_point() or client_value.is_complex():
+            client_update = client_value.detach().to(dtype=torch.float64) - server_value.detach().to(
+                dtype=torch.float64
+            )
+            aggregate_update = aggregate_value.detach().to(dtype=torch.float64) - server_value.detach().to(
+                dtype=torch.float64
+            )
+            if not torch.isfinite(client_update).all() or not torch.isfinite(aggregate_update).all():
+                raise ValueError("model update contains NaN or infinity")
+            dot_product += float(torch.sum(client_update * aggregate_update))
+            client_squared += float(torch.sum(client_update.abs().square()))
+            aggregate_squared += float(torch.sum(aggregate_update.abs().square()))
+    if client_squared == 0 or aggregate_squared == 0:
+        return 0.0
+    result = dot_product / math.sqrt(client_squared * aggregate_squared)
+    if not math.isfinite(result):
+        raise ValueError("model-update cosine similarity is not finite")
+    return min(1.0, max(-1.0, result))
+
+
 def aggregation_weights(inputs: list[AggregationInput]) -> list[float]:
     if not inputs:
         raise ValueError("cannot aggregate an empty client-update collection")

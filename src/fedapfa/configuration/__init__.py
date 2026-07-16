@@ -3,10 +3,20 @@ from .federated_manifest import FEDERATED_SEEDS, load_federated_config, load_fed
 from .federated_validation import paired_configuration_identity, validate_federated_config
 from .loader import load_config, load_resolved_config
 from .manifest import ManifestTask, load_centralized_manifest
+from .scientific_manifests import (
+    ContextTask,
+    load_heterogeneity_context_tasks,
+    load_heterogeneity_manifest,
+    load_published_fedsnn_manifest,
+)
 from .validation import ConfigurationError, validate_config
 
 __all__ = [
     "ManifestTask",
+    "ContextTask",
+    "load_heterogeneity_context_tasks",
+    "load_heterogeneity_manifest",
+    "load_published_fedsnn_manifest",
     "FEDERATED_SEEDS",
     "load_centralized_manifest",
     "load_federated_config",

@@ -25,6 +25,9 @@ fedapfa-train-federated = "fedapfa.cli.train_federated:main"
 fedapfa-evaluate-checkpoint = "fedapfa.cli.evaluate_checkpoint:main"
 fedapfa-summarize-centralized = "fedapfa.cli.summarize_centralized:main"
 fedapfa-summarize-federated = "fedapfa.cli.summarize_federated:main"
+fedapfa-derive-heterogeneity-context = "fedapfa.cli.derive_heterogeneity_context:main"
+fedapfa-summarize-heterogeneity = "fedapfa.cli.summarize_heterogeneity:main"
+fedapfa-summarize-published-fedsnn = "fedapfa.cli.summarize_published_fedsnn:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fedapfa"]

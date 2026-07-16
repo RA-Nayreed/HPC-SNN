@@ -62,6 +62,7 @@ class SyntheticFederatedBundle:
         artifact["partition_id"] = sha256_json(artifact)
         self.partition = DirichletPartition(artifact["partition_id"], artifact)
         self.split_artifact = {
+            "dataset_identity": {"name": "synthetic", "sha256": "fixture"},
             "training_indices": list(range(8)),
             "validation_indices": list(range(8, 12)),
         }
@@ -144,7 +145,8 @@ def test_client_isolation_state_reset_and_single_client_equivalence(tmp_path):
         model_payload_bytes(server.state_dict()),
     )
     assert all(torch.equal(before[name], server.state_dict()[name]) for name in before)
-    weights, _ = aggregate_client_results(server, [result])
+    weights, _, cosines = aggregate_client_results(server, [result])
+    assert cosines == pytest.approx([1.0])
     assert weights == [1.0]
     assert all(torch.equal(result.state_dict[name], server.state_dict()[name]) for name in result.state_dict)
     evaluation = evaluate_model(server, bundle.validation_dataset, torch.device("cpu"), 4, seed=3)

@@ -1,0 +1,27 @@
+include:
+  - ../../../configs/base/centralized.yaml
+  - ../../../configs/datasets/shd_independent_evaluation.yaml
+  - ../../../configs/models/lif_2layer.yaml
+  - ../../../configs/attention/none.yaml
+  - ../../../configs/federated/fedavg.yaml
+name: shd_lif_dirichlet_alpha_0_1_participation_0_50
+mode: scientific_evaluation
+execution: federated
+protocol: independent_evaluation
+device: cuda
+output_root: runs/heterogeneity
+pairing_group: shd_lif_heterogeneity_participation_0_50
+federated:
+  participation_fraction: 0.50
+  clients_per_round: 10
+  record_extended_diagnostics: true
+  partition:
+    method: label_dirichlet
+    alpha: 0.1
+metadata:
+  experiment: shd_lif_dirichlet_alpha_0_1_participation_0_50
+  purpose: heterogeneity_evaluation
+acceptance:
+  expected_model_class: AudioLIFSNN
+  reference_test_accuracy: null
+  absolute_tolerance: null

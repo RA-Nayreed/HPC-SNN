@@ -1,19 +1,22 @@
 federated:
   algorithm: fedavg
   rounds: 100
-  clients: 20
-  local_epochs: 1
+  clients: 10
+  clients_per_round: 2
+  participation_fraction: 0.20
+  local_epochs: 5
   local_batch_size: 32
-  optimizer: adam
-  learning_rate: 0.001
+  optimizer: sgd
+  learning_rate: 0.1
+  momentum: 0.95
   weight_decay: 0.0
-  gradient_clip: 1.0
-  learning_rate_reduction_rounds: []
-  learning_rate_reduction_factor: 1.0
+  gradient_clip: null
+  learning_rate_reduction_rounds: [40, 60, 80]
+  learning_rate_reduction_factor: 5
   client_sampling: without_replacement
   retain_optimizer_state: false
   official_test_evaluation_during_rounds: false
-  record_extended_diagnostics: false
+  record_extended_diagnostics: true
   data_loader_workers: 8
   persistent_workers: true
   partition:

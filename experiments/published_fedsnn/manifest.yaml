@@ -1,0 +1,7 @@
+schema_version: 1
+collection: published_fedsnn
+seeds_file: seeds.yaml
+experiments:
+  - id: cifar10_svgg9_bntt_dirichlet_alpha_0_5
+    config: cifar10/svgg9_bntt_dirichlet_alpha_0_5.yaml
+    mandatory: true

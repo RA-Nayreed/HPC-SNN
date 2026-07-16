@@ -82,6 +82,14 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
         "logical_total_bytes",
         "aggregation_weight",
         "resolved_training_seed",
+        "resolved_learning_rate",
+        "initial_local_loss",
+        "initial_local_accuracy",
+        "final_local_loss",
+        "final_local_accuracy",
+        "client_spike_rates",
+        "training_duration_seconds",
+        "update_cosine_similarity",
     }
     round_required = {
         "round_number",
@@ -91,9 +99,17 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
         "total_selected_examples",
         "validation_loss",
         "validation_accuracy",
+        "validation_macro_f1",
+        "validation_per_class_accuracy",
+        "validation_confusion_matrix",
         "validation_spike_rates",
         "global_model_l2_norm",
         "aggregated_update_l2_norm",
+        "mean_client_update_l2_norm",
+        "standard_deviation_client_update_l2_norm",
+        "mean_client_to_aggregate_cosine_similarity",
+        "minimum_client_to_aggregate_cosine_similarity",
+        "maximum_client_to_aggregate_cosine_similarity",
         "client_training_time_seconds",
         "aggregation_time_seconds",
         "validation_time_seconds",
@@ -104,6 +120,7 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
         "cumulative_logical_download_bytes",
         "cumulative_logical_upload_bytes",
         "cumulative_logical_communication_bytes",
+        "peak_cuda_memory_bytes",
         "current_best_validation_round",
         "selected_checkpoint",
     }
@@ -174,12 +191,40 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
             failures.append(f"{log_name} is missing or empty")
     if official_test.get("access_count") != 1:
         failures.append("official test evaluation must exist exactly once")
+    if official_test.get("complete_split") is not True:
+        failures.append("official test did not use the complete configured split")
+    if official_test.get("evaluation_completed") is not True:
+        failures.append("official test record is incomplete")
     if official_test.get("evaluated_after_model_selection") is not True:
         failures.append("official test was not evaluated after model selection")
     if official_test.get("monitored_during_rounds") is not False:
         failures.append("official test was accessed during communication rounds")
     if not final_metrics.get("test"):
         failures.append("official test metrics are missing")
+    else:
+        required_test_metrics = {
+            "loss",
+            "accuracy",
+            "macro_f1",
+            "per_class_accuracy",
+            "confusion_matrix",
+            "spike_rates",
+        }
+        missing_test_metrics = required_test_metrics.difference(final_metrics["test"])
+        if missing_test_metrics:
+            failures.append(f"official test metrics are missing fields: {sorted(missing_test_metrics)}")
+    if any(
+        config.get("subset", {}).get(key) != 0
+        for key in ("train_examples", "validation_examples", "test_examples")
+    ):
+        failures.append("scientific execution used configured sample caps")
+    if any(
+        config.get("training", {}).get(key) is not None
+        for key in ("max_train_batches", "max_validation_batches", "max_test_batches")
+    ):
+        failures.append("scientific execution used configured batch caps")
+    if not split.get("dataset_identity") and not final_metrics.get("dataset_identity"):
+        failures.append("dataset identity is missing")
     for identity_name, artifact, key in (
         ("configuration", final_metrics, "configuration_id"),
         ("partition", partition, "partition_id"),
@@ -213,16 +258,24 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
 
     completed = not failures
     achieved = final_metrics.get("test", {}).get("accuracy")
+    reference = config["acceptance"].get("reference_test_accuracy")
+    tolerance = config["acceptance"].get("absolute_tolerance")
+    difference = None if reference is None or achieved is None else abs(float(achieved) - float(reference))
+    scientific_status = (
+        "not_claimed"
+        if reference is None
+        else ("passed" if completed and difference is not None and difference <= tolerance else "failed")
+    )
     return {
         "mode": config["mode"],
         "accepted": completed,
         "completed": completed,
         "completion_failures": failures,
-        "scientific_status": "not_claimed",
-        "reference_test_accuracy": None,
+        "scientific_status": scientific_status,
+        "reference_test_accuracy": reference,
         "achieved_test_accuracy": achieved,
-        "absolute_accuracy_difference": None,
-        "tolerance": None,
+        "absolute_accuracy_difference": difference,
+        "tolerance": tolerance,
         "protocol": config["protocol"],
         "seed": config["seed"],
         "git_commit": git_commit,
@@ -231,6 +284,11 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
         "partition_id": partition.get("partition_id"),
         "split_id": split.get("split_id"),
         "model_initialization_id": initialization.get("model_initialization_id"),
+        "dataset_identity": split.get("dataset_identity") or final_metrics.get("dataset_identity"),
+        "protocol_assumptions": config.get("protocol_assumptions", []),
+        "client_fairness_proxy_definition": (
+            "This is a distribution-weighted proxy, not observed accuracy on private client test data."
+        ),
         "official_test_access_information": {
             "access_count": official_test.get("access_count"),
             "monitored_during_rounds": official_test.get("monitored_during_rounds"),

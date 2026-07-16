@@ -1,0 +1,18 @@
+dataset:
+  name: cifar10
+  root: data/cifar10
+  classes: 10
+  channels: 3
+  image_size: 32
+  validation_fraction: 0.1
+  standard_train_split: true
+  standard_test_split: true
+  download_during_training: false
+  transforms:
+    image_size: 32
+    normalization: scale_0_1
+    augmentation:
+      random_crop: true
+      crop_padding: 4
+      horizontal_flip: true
+      horizontal_flip_probability: 0.5

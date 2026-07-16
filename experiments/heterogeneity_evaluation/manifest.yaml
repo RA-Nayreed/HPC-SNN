@@ -1,0 +1,19 @@
+schema_version: 1
+collection: heterogeneity_evaluation
+seeds_file: seeds.yaml
+contextual_evidence:
+  experiment: shd_lif_dirichlet_alpha_0_5_participation_0_50
+  summary: ../../results/federated/federated_summary.json
+  participation_fraction: 0.50
+  alpha: 0.5
+  new_training_task: false
+experiments:
+  - id: shd_lif_iid_participation_0_50
+    config: shd/lif_iid_participation_0_50.yaml
+    mandatory: true
+  - id: shd_lif_dirichlet_alpha_1_0_participation_0_50
+    config: shd/lif_dirichlet_alpha_1_0_participation_0_50.yaml
+    mandatory: true
+  - id: shd_lif_dirichlet_alpha_0_1_participation_0_50
+    config: shd/lif_dirichlet_alpha_0_1_participation_0_50.yaml
+    mandatory: true

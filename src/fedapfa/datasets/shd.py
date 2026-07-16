@@ -14,6 +14,8 @@ from .validation import OFFICIAL_EXPECTATIONS, DatasetExpectation, validate_hdf5
 
 
 class EventAudioDataset(Dataset):
+    fedapfa_batch_kind = "event_sequence"
+
     def __init__(
         self,
         path: str | Path,
