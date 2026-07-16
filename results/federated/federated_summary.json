@@ -1,0 +1,351 @@
+{
+  "centralized_context": {
+    "experiment": "shd_lif_independent_evaluation",
+    "official_test_accuracy": {
+      "maximum": 0.7848939929328622,
+      "mean": 0.7636925795053003,
+      "minimum": 0.7398409893992933,
+      "sample_standard_deviation": 0.022643119466389208
+    },
+    "protocol": "independent_evaluation",
+    "runs": [
+      {
+        "official_test_accuracy": 0.7663427561837456,
+        "seed": 7
+      },
+      {
+        "official_test_accuracy": 0.7848939929328622,
+        "seed": 17
+      },
+      {
+        "official_test_accuracy": 0.7398409893992933,
+        "seed": 27
+      }
+    ],
+    "source": "/projappl/project_2015302/HPC-SNN/results/centralized/centralized_summary.json"
+  },
+  "expected_task_count": 6,
+  "experiments": [
+    {
+      "centralized_minus_federated_accuracy": 0.06404593639575973,
+      "completed": true,
+      "completed_seed_count": 3,
+      "experiment": "shd_lif_dirichlet_alpha_0_5_participation_0_50",
+      "mean_client_spike_rates": {
+        "layer1": {
+          "maximum": 0.13440575592558004,
+          "mean": 0.12485130356528694,
+          "minimum": 0.11167898869140294,
+          "sample_standard_deviation": 0.011787416345601402
+        },
+        "layer2": {
+          "maximum": 0.02714928715783514,
+          "mean": 0.02583682893900752,
+          "minimum": 0.02472086240249523,
+          "sample_standard_deviation": 0.0012260784779129165
+        }
+      },
+      "metrics": {
+        "best_validation_accuracy": {
+          "maximum": 0.8970588235294118,
+          "mean": 0.8868464052287581,
+          "minimum": 0.8786764705882353,
+          "sample_standard_deviation": 0.009359835978259505
+        },
+        "execution_time_seconds": {
+          "maximum": 1657.9860309429932,
+          "mean": 1594.256473505947,
+          "minimum": 1543.7941707608989,
+          "sample_standard_deviation": 58.24053801484412
+        },
+        "final_validation_accuracy": {
+          "maximum": 0.8848039215686274,
+          "mean": 0.8729575163398693,
+          "minimum": 0.8578431372549019,
+          "sample_standard_deviation": 0.013774277205953742
+        },
+        "logical_communication_bytes": {
+          "maximum": 856224000.0,
+          "mean": 856224000.0,
+          "minimum": 856224000.0,
+          "sample_standard_deviation": 0.0
+        },
+        "mean_client_update_l2_norm": {
+          "maximum": 1.1152675185448169,
+          "mean": 1.1095900666628706,
+          "minimum": 1.1063980809921292,
+          "sample_standard_deviation": 0.004929491590472301
+        },
+        "official_test_accuracy": {
+          "maximum": 0.7248233215547704,
+          "mean": 0.6996466431095406,
+          "minimum": 0.6665194346289752,
+          "sample_standard_deviation": 0.029954031507395756
+        },
+        "selected_round": {
+          "maximum": 100.0,
+          "mean": 96.33333333333333,
+          "minimum": 94.0,
+          "sample_standard_deviation": 3.2145502536643185
+        }
+      },
+      "parameter_count": 107028,
+      "participation_fraction": 0.5,
+      "protocol": "independent_evaluation",
+      "required_seeds": [
+        7,
+        17,
+        27
+      ],
+      "runs": [
+        {
+          "best_validation_accuracy": 0.8848039215686274,
+          "execution_time_seconds": 1543.7941707608989,
+          "final_validation_accuracy": 0.8848039215686274,
+          "git_commit": "29ad1558dff52b856ee35b6ce2f538ec2006594a",
+          "logical_communication_bytes": 856224000.0,
+          "mean_client_spike_rates": {
+            "layer1": 0.12846916607887782,
+            "layer2": 0.02714928715783514
+          },
+          "mean_client_update_l2_norm": 1.1071046004516658,
+          "model_initialization_id": "1c45df019365b965f3625b3d608121ea20881e77f58dcfffef9945959ec1288e",
+          "official_test_accuracy": 0.7075971731448764,
+          "parameter_count": 107028,
+          "participation_fraction": 0.5,
+          "partition_id": "9619e99cb362694bd2a5116dc33db952ce2e27551ddf01b9accd843a6fd7bdb1",
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/federated/shd_lif_dirichlet_alpha_0_5_participation_0_50-seed7-471b7a11",
+          "seed": 7,
+          "selected_round": 100.0,
+          "split_id": "e9fa7ca3a1d9bb601b798ec3becca0af8b60ace34a76bb4571b40b0cfe7a3f07"
+        },
+        {
+          "best_validation_accuracy": 0.8970588235294118,
+          "execution_time_seconds": 1657.9860309429932,
+          "final_validation_accuracy": 0.8578431372549019,
+          "git_commit": "29ad1558dff52b856ee35b6ce2f538ec2006594a",
+          "logical_communication_bytes": 856224000.0,
+          "mean_client_spike_rates": {
+            "layer1": 0.13440575592558004,
+            "layer2": 0.025640337256692187
+          },
+          "mean_client_update_l2_norm": 1.1063980809921292,
+          "model_initialization_id": "7b533ad2fa9260bd1a25e1b47f272aed3d6e7dbde09f215e16fa20d5477919ab",
+          "official_test_accuracy": 0.6665194346289752,
+          "parameter_count": 107028,
+          "participation_fraction": 0.5,
+          "partition_id": "4c26a45fd10ee15a6aa9fbd9a448c62bae558b559552a2ebccaef5938e7f3dd6",
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/federated/shd_lif_dirichlet_alpha_0_5_participation_0_50-seed17-ce4fb4ce",
+          "seed": 17,
+          "selected_round": 95.0,
+          "split_id": "4d6fc923106f32f3ca54ab255fd87efa99d362cb38e8fdd208611eaad7f09e5e"
+        },
+        {
+          "best_validation_accuracy": 0.8786764705882353,
+          "execution_time_seconds": 1580.9892188139493,
+          "final_validation_accuracy": 0.8762254901960784,
+          "git_commit": "29ad1558dff52b856ee35b6ce2f538ec2006594a",
+          "logical_communication_bytes": 856224000.0,
+          "mean_client_spike_rates": {
+            "layer1": 0.11167898869140294,
+            "layer2": 0.02472086240249523
+          },
+          "mean_client_update_l2_norm": 1.1152675185448169,
+          "model_initialization_id": "28052b7ceac146a32aaaf356d339686de3ce400d29fb6a2230e16c420a81f7a5",
+          "official_test_accuracy": 0.7248233215547704,
+          "parameter_count": 107028,
+          "participation_fraction": 0.5,
+          "partition_id": "7dcd2ff0fc49bb6dfbca8d03670c317553a3eafdef4d7c171755467df2e134b5",
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/federated/shd_lif_dirichlet_alpha_0_5_participation_0_50-seed27-5ccba012",
+          "seed": 27,
+          "selected_round": 94.0,
+          "split_id": "ae67ecc87fa7dd749ea0e3347143a141d885e3e7468c88759a82e9a37f76bb66"
+        }
+      ],
+      "scientific_status": "not_claimed"
+    },
+    {
+      "centralized_minus_federated_accuracy": 0.09275618374558303,
+      "completed": true,
+      "completed_seed_count": 3,
+      "experiment": "shd_lif_dirichlet_alpha_0_5_participation_0_25",
+      "mean_client_spike_rates": {
+        "layer1": {
+          "maximum": 0.12265825073849881,
+          "mean": 0.11597106632882172,
+          "minimum": 0.10385637945001575,
+          "sample_standard_deviation": 0.01051051512897779
+        },
+        "layer2": {
+          "maximum": 0.024982176608093917,
+          "mean": 0.023578163740128194,
+          "minimum": 0.022492264949813507,
+          "sample_standard_deviation": 0.0012750735042773031
+        }
+      },
+      "metrics": {
+        "best_validation_accuracy": {
+          "maximum": 0.8627450980392157,
+          "mean": 0.8431372549019608,
+          "minimum": 0.8284313725490197,
+          "sample_standard_deviation": 0.01767427095815681
+        },
+        "execution_time_seconds": {
+          "maximum": 886.6500480409304,
+          "mean": 869.6863951277337,
+          "minimum": 847.9376993933693,
+          "sample_standard_deviation": 19.794796299858437
+        },
+        "final_validation_accuracy": {
+          "maximum": 0.8308823529411765,
+          "mean": 0.8174019607843137,
+          "minimum": 0.7953431372549019,
+          "sample_standard_deviation": 0.019260090251840365
+        },
+        "logical_communication_bytes": {
+          "maximum": 428112000.0,
+          "mean": 428112000.0,
+          "minimum": 428112000.0,
+          "sample_standard_deviation": 0.0
+        },
+        "mean_client_update_l2_norm": {
+          "maximum": 1.1636733174490201,
+          "mean": 1.15466396755531,
+          "minimum": 1.1481364689427127,
+          "sample_standard_deviation": 0.00806027944386284
+        },
+        "official_test_accuracy": {
+          "maximum": 0.6828621908127208,
+          "mean": 0.6709363957597173,
+          "minimum": 0.6585689045936396,
+          "sample_standard_deviation": 0.012152664745757576
+        },
+        "selected_round": {
+          "maximum": 95.0,
+          "mean": 94.33333333333333,
+          "minimum": 93.0,
+          "sample_standard_deviation": 1.1547005383792515
+        }
+      },
+      "parameter_count": 107028,
+      "participation_fraction": 0.25,
+      "protocol": "independent_evaluation",
+      "required_seeds": [
+        7,
+        17,
+        27
+      ],
+      "runs": [
+        {
+          "best_validation_accuracy": 0.8382352941176471,
+          "execution_time_seconds": 874.4714379489014,
+          "final_validation_accuracy": 0.8259803921568627,
+          "git_commit": "29ad1558dff52b856ee35b6ce2f538ec2006594a",
+          "logical_communication_bytes": 428112000.0,
+          "mean_client_spike_rates": {
+            "layer1": 0.12139856879795059,
+            "layer2": 0.024982176608093917
+          },
+          "mean_client_update_l2_norm": 1.1481364689427127,
+          "model_initialization_id": "1c45df019365b965f3625b3d608121ea20881e77f58dcfffef9945959ec1288e",
+          "official_test_accuracy": 0.6828621908127208,
+          "parameter_count": 107028,
+          "participation_fraction": 0.25,
+          "partition_id": "9619e99cb362694bd2a5116dc33db952ce2e27551ddf01b9accd843a6fd7bdb1",
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/federated/shd_lif_dirichlet_alpha_0_5_participation_0_25-seed7-92d1ca1a",
+          "seed": 7,
+          "selected_round": 95.0,
+          "split_id": "e9fa7ca3a1d9bb601b798ec3becca0af8b60ace34a76bb4571b40b0cfe7a3f07"
+        },
+        {
+          "best_validation_accuracy": 0.8284313725490197,
+          "execution_time_seconds": 886.6500480409304,
+          "final_validation_accuracy": 0.7953431372549019,
+          "git_commit": "29ad1558dff52b856ee35b6ce2f538ec2006594a",
+          "logical_communication_bytes": 428112000.0,
+          "mean_client_spike_rates": {
+            "layer1": 0.12265825073849881,
+            "layer2": 0.022492264949813507
+          },
+          "mean_client_update_l2_norm": 1.1636733174490201,
+          "model_initialization_id": "7b533ad2fa9260bd1a25e1b47f272aed3d6e7dbde09f215e16fa20d5477919ab",
+          "official_test_accuracy": 0.6585689045936396,
+          "parameter_count": 107028,
+          "participation_fraction": 0.25,
+          "partition_id": "4c26a45fd10ee15a6aa9fbd9a448c62bae558b559552a2ebccaef5938e7f3dd6",
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/federated/shd_lif_dirichlet_alpha_0_5_participation_0_25-seed17-f8296b9c",
+          "seed": 17,
+          "selected_round": 95.0,
+          "split_id": "4d6fc923106f32f3ca54ab255fd87efa99d362cb38e8fdd208611eaad7f09e5e"
+        },
+        {
+          "best_validation_accuracy": 0.8627450980392157,
+          "execution_time_seconds": 847.9376993933693,
+          "final_validation_accuracy": 0.8308823529411765,
+          "git_commit": "29ad1558dff52b856ee35b6ce2f538ec2006594a",
+          "logical_communication_bytes": 428112000.0,
+          "mean_client_spike_rates": {
+            "layer1": 0.10385637945001575,
+            "layer2": 0.02326004966247716
+          },
+          "mean_client_update_l2_norm": 1.1521821162741972,
+          "model_initialization_id": "28052b7ceac146a32aaaf356d339686de3ce400d29fb6a2230e16c420a81f7a5",
+          "official_test_accuracy": 0.6713780918727915,
+          "parameter_count": 107028,
+          "participation_fraction": 0.25,
+          "partition_id": "7dcd2ff0fc49bb6dfbca8d03670c317553a3eafdef4d7c171755467df2e134b5",
+          "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/federated/shd_lif_dirichlet_alpha_0_5_participation_0_25-seed27-e17c92c2",
+          "seed": 27,
+          "selected_round": 93.0,
+          "split_id": "ae67ecc87fa7dd749ea0e3347143a141d885e3e7468c88759a82e9a37f76bb66"
+        }
+      ],
+      "scientific_status": "not_claimed"
+    }
+  ],
+  "manifest": "/projappl/project_2015302/HPC-SNN/experiments/federated_baselines/manifest.yaml",
+  "paired_participation_differences": {
+    "definition": "participation_0_50_minus_participation_0_25_by_seed",
+    "official_test_accuracy_difference": {
+      "maximum": 0.053445229681978845,
+      "mean": 0.02871024734982334,
+      "minimum": 0.007950530035335635,
+      "sample_standard_deviation": 0.0230063898288082
+    },
+    "runs": [
+      {
+        "best_validation_accuracy_difference": 0.04656862745098034,
+        "execution_time_seconds_difference": 669.3227328119974,
+        "logical_communication_bytes_difference": 428112000.0,
+        "official_test_accuracy_difference": 0.024734982332155542,
+        "seed": 7,
+        "selected_round_difference": 5.0
+      },
+      {
+        "best_validation_accuracy_difference": 0.06862745098039214,
+        "execution_time_seconds_difference": 771.3359829020628,
+        "logical_communication_bytes_difference": 428112000.0,
+        "official_test_accuracy_difference": 0.007950530035335635,
+        "seed": 17,
+        "selected_round_difference": 0.0
+      },
+      {
+        "best_validation_accuracy_difference": 0.01593137254901955,
+        "execution_time_seconds_difference": 733.05151942058,
+        "logical_communication_bytes_difference": 428112000.0,
+        "official_test_accuracy_difference": 0.053445229681978845,
+        "seed": 27,
+        "selected_round_difference": 1.0
+      }
+    ]
+  },
+  "required_seeds": [
+    7,
+    17,
+    27
+  ],
+  "runs_root": "/scratch/project_2015302/rnayreed/hpc-snn/runs/federated",
+  "schema_version": 1,
+  "valid": true,
+  "validation_findings": []
+}
