@@ -78,38 +78,21 @@ Execution completion requires a valid terminal condition, finite metrics, both c
 
 ## Federated SHD LIF reference
 
-The federated reference uses SHD so that FedAvg correctness can be assessed against the completed centralized SHD LIF evidence without also changing the dataset or model family. It uses the ordinary 256/256 LIF network before attention mechanisms; FedAvg is reference infrastructure, not a novelty claim. SSC remains necessary for broader generalization and resource evidence but is outside this two-treatment matrix.
+The federated SHD LIF evaluation is complete. It uses SHD so that FedAvg can be assessed against the centralized SHD LIF reference without also changing the dataset or model family. The ordinary 256/256 LIF network is evaluated before attention mechanisms; FedAvg is reference infrastructure, not a novelty claim. SSC remains necessary for cross-dataset generalization and resource evidence but is outside this two-treatment matrix.
 
-| Experiment | Clients | Dirichlet alpha | Participation | Seeds |
-|---|---:|---:|---:|---|
-| SHD LIF FedAvg | 20 | 0.5 | 50% (10 clients per round) | 7, 17, 27 |
-| SHD LIF FedAvg | 20 | 0.5 | 25% (5 clients per round) | 7, 17, 27 |
+Accuracy is mean ± sample standard deviation across seeds 7, 17, and 27:
+
+| Participation | Selected / total clients | Best validation accuracy | Official-test accuracy | Logical communication | Seeds |
+|---:|---:|---:|---:|---:|---:|
+| 50% | 10 / 20 | 88.6846% ± 0.935984% | 69.9647% ± 2.99540% | 856,224,000 bytes | 7, 17, 27 |
+| 25% | 5 / 20 | 84.3137% ± 1.76743% | 67.0936% ± 1.21527% | 428,112,000 bytes | 7, 17, 27 |
+
+The [generated federated summary](results/federated/federated_summary.md) provides the aggregation, and the [federated scientific record](thesis_records/federated_baseline.md) documents the methods, evidence, interpretation, and limitations.
 
 For each seed, the established stratified SHD validation split is removed before client partitioning. The remaining training indices are assigned exactly once by deterministic label-wise Dirichlet sampling. Both participation treatments reuse the same split, partition, initial global parameters, and round-specific client permutation; the five-client selection is the prefix of the ten-client selection. Validation selects the global checkpoint, and the official test dataset is constructed only after all 100 communication rounds.
 
 FedAvg uses sample-count weighting, `w_next = sum(n_k * w_k) / sum(n_k)`. Each selected client receives an isolated global-model copy and a newly created Adam optimizer. Optimizer state stays local and is neither retained nor aggregated. Logical communication counts one tensor-model download and upload per selected client; it excludes optimizer state, dataset transfer, checkpoint I/O, and telemetry and is not measured network traffic.
 
-After review, submit the six independent executions with:
+Within this protocol, selecting ten rather than five clients increased mean official-test accuracy by 2.87102 percentage points and used exactly twice the logical communication. Both federated means remained below the centralized SHD LIF independent-evaluation mean of 76.3693%, by 6.4046 and 9.2756 percentage points respectively. These are descriptive three-seed comparisons, not significance or causality claims.
 
-~~~bash
-bash scripts/slurm/submit_roihu_federated.sh \
-  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
-  --max-parallel 1
-~~~
-
-Monitor the returned job ID:
-
-~~~bash
-squeue --job <JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
-~~~
-
-Aggregate only after all six executions pass completion checks:
-
-~~~bash
-fedapfa-summarize-federated \
-  --manifest experiments/federated_baselines/manifest.yaml \
-  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/federated" \
-  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/federated"
-~~~
-
-No federated scientific accuracy is recorded yet. The reference becomes experimentally finished only after all six Roihu executions complete, their acceptance records pass, paired identities match, and the generated aggregation is valid.
+All six executions passed completion checks. Their scientific status is `not_claimed` because no verified published FedAvg target is configured; this is expected and is not an execution failure or a reproduction claim. Federated and centralized measurements remain visibly separate even where their independent-evaluation rules permit contextual comparison.

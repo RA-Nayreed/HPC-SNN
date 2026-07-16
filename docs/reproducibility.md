@@ -66,6 +66,76 @@ Completion requires every configured round, valid client selections and aggregat
 
 `fedapfa-summarize-federated` requires the two manifest treatments and seeds 7, 17, and 27. It rejects missing, duplicate, incompatible, or incomplete executions; preserves the participation rows; checks paired identities; calculates aggregate statistics and per-seed 50%-minus-25% differences; and reports the centralized-to-federated accuracy gap as context. Its outputs are `federated_summary.json`, `federated_summary.csv`, and `federated_summary.md`.
 
-## Prospective GPU telemetry
+## Committed federated evidence
+
+The exact manifest is [`experiments/federated_baselines/manifest.yaml`](../experiments/federated_baselines/manifest.yaml). Its two participation treatments crossed with seeds 7, 17, and 27 produce six scientific executions. Aggregation verified that every execution passed completion acceptance, that paired treatments share split, partition, and model-initialization identities for each seed, and that scientific status is `not_claimed` because no verified published target is configured.
+
+The committed evidence has distinct roles:
+
+- [`federated_summary.json`](../results/federated/federated_summary.json) is the authoritative machine-readable aggregation, including validity findings, per-seed records, aggregate statistics, paired differences, centralized context, and scientific status.
+- [`federated_summary.csv`](../results/federated/federated_summary.csv) is the tabular aggregate export.
+- [`federated_summary.md`](../results/federated/federated_summary.md) is the generated readable summary.
+- [`slurm-accounting.txt`](../results/federated/provenance/slurm-accounting.txt) records all six tasks in array `189464` as completed with exit code `0:0`.
+- [`execution-commit.txt`](../results/federated/provenance/execution-commit.txt) records executed source commit `29ad1558dff52b856ee35b6ce2f538ec2006594a`.
+- [`slurm-array-id.txt`](../results/federated/provenance/slurm-array-id.txt) records array identifier `189464`.
+
+Each accepted run must retain its resolved configuration, Git record, split, partition, model-initialization identity, resolved seed streams, checkpoints, client and round logs, final metrics, official-test record, and acceptance record. The aggregation is valid only when these identities and records agree with the manifest and committed execution provenance.
+
+## Federated reproduction commands
+
+The repository's Roihu reproduction command creates one six-task `gpumedium` array with one GH200 per task and a default concurrency of one:
+
+~~~bash
+bash scripts/slurm/submit_roihu_federated.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
+  --max-parallel 1
+~~~
+
+This is a reproduction command, not an action required to validate the committed evidence. A live reproduction array can be monitored with:
+
+~~~bash
+squeue --job <JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+~~~
+
+Scheduler outcomes can be recorded with:
+
+~~~bash
+sacct -j <JOB_ID> --array \
+  --format=JobID,State,ExitCode,Elapsed,Start,End,AllocTRES
+~~~
+
+Aggregate compatible accepted runs with:
+
+~~~bash
+fedapfa-summarize-federated \
+  --manifest experiments/federated_baselines/manifest.yaml \
+  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/federated" \
+  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/federated"
+~~~
+
+Check the six acceptance records before aggregation:
+
+~~~bash
+WORK_DIR="/scratch/$CSC_PROJECT/$USER/hpc-snn"
+mapfile -t acceptance_records < <(
+  find "$WORK_DIR/runs/federated" -mindepth 2 -maxdepth 2 \
+    -name acceptance.json -print | sort
+)
+[[ "${#acceptance_records[@]}" -eq 6 ]]
+for record in "${acceptance_records[@]}"; do
+  jq -e '
+    .accepted == true and
+    .completed == true and
+    (.completion_failures | length == 0) and
+    .scientific_status == "not_claimed"
+  ' "$record"
+done
+~~~
+
+The generated output paths are `$WORK_DIR/results/federated/federated_summary.json`, `$WORK_DIR/results/federated/federated_summary.csv`, and `$WORK_DIR/results/federated/federated_summary.md`. Run-level evidence remains below `$WORK_DIR/runs/federated`, Slurm output below `$WORK_DIR/slurm-logs/federated`, and device telemetry below `$WORK_DIR/telemetry/federated`.
+
+## GPU telemetry scope
 
 The Roihu array script samples supported `nvidia-smi` fields every two seconds and records the command, interval, unsupported fields, and CSV observations. Sampling begins before training and is stopped on normal exit, failure, or signal. These observations are job-level GPU telemetry. They are not measured network traffic, per-client energy, neural-model energy, or neuromorphic energy, and their sampling interval limits short-event attribution.
+
+The committed aggregation does not contain device-utilization or energy estimates. Logical communication counts communicated tensors and cannot be interpreted as network traffic or energy. A scheduler time limit is a reservation constraint, not an observed execution time.

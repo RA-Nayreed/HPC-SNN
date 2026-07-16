@@ -39,9 +39,11 @@ All 18 mandatory executions completed for the six experiments and seeds 7, 17, a
 
 ## Federated SHD LIF reference
 
-SHD is the sole dataset in the initial FedAvg reference because it has a validated centralized LIF comparison and permits federated correctness to be examined without changing the dataset, model, and aggregation algorithm together. The ordinary two-hidden-layer LIF model is used before any attention mechanism. This reference is infrastructure for subsequent experiments and is not a novelty claim.
+SHD is the sole dataset in the FedAvg baseline because it has a validated centralized LIF comparison and permits federated correctness to be examined without changing the dataset, model, and aggregation algorithm together. SSC remains reserved for cross-dataset generalization and resource evaluation. The ordinary two-hidden-layer LIF model is used before any attention mechanism. DCLS, PfA, adaptive attention, hierarchical aggregation, multiple GPUs, and multiple nodes are excluded. This baseline is reference infrastructure and is not a novelty claim.
 
 The manifest `experiments/federated_baselines/manifest.yaml` contains two treatments: 20 clients with label-wise Dirichlet alpha 0.5 and either 10 selected clients (50%) or 5 selected clients (25%) per round. Seeds 7, 17, and 27 produce six scientific executions. Each execution uses 100 rounds, one local epoch, batch size 32, Adam learning rate 0.001, zero weight decay, gradient clipping at 1, and no learning-rate scheduler or early stopping.
+
+Both treatments use the official `shd_train.h5` and `shd_test.h5` files, 20 classes, 10 ms temporal integration, and deterministic reduction from 700 cochlear channels to 140 inputs. The model has two hidden LIF layers with 256 neurons each, tau 10.05, threshold 1, subtractive detached reset, an ATan surrogate with alpha 5, dropout 0.4, and no batch normalization. The global model starts from seed-specific random initialization rather than a centralized checkpoint.
 
 ### Split and partition isolation
 
@@ -70,3 +72,13 @@ Global validation accuracy selects `checkpoints/best.pt`, while `checkpoints/las
 ### Communication definition
 
 Logical communication includes one global-model download and one client-model upload for every selected client. Bytes equal each communicated tensor's element count multiplied by its element size. Optimizer state, dataset transfer, checkpoint I/O, and telemetry are excluded. This value is a deterministic accounting quantity, not measured network traffic.
+
+No compression, quantization, sparsification, or event-based communication method is part of this baseline. With the model and round count fixed, doubling selected clients doubles the logical communication count. Logical communication is neither physical network measurement nor energy consumption.
+
+### Completion rules
+
+Completion requires all 100 rounds, valid partition integrity, 20 clients, the configured number of distinct selected clients in each round, finite records, valid aggregation weights, both nonempty checkpoints, nonempty client and round logs, complete and nonduplicated assignment of eligible training indices, validation and test isolation, exactly one official-test evaluation after model selection, Git and configuration provenance, scientific identities, and consistent logical communication accounting. Accuracy is not a completion condition. A missing verified reproduction target yields `scientific_status: not_claimed`, not execution failure.
+
+### Collected federated evidence
+
+All six mandatory scientific executions completed and passed aggregation validation for both treatments and seeds 7, 17, and 27. The [federated summary](../results/federated/federated_summary.md) records the measurements, and the [federated scientific record](../thesis_records/federated_baseline.md) separates evidence, interpretation, and limitations. Observed results do not alter the partition, selection, test-isolation, or acceptance rules in this methods document.

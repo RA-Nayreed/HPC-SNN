@@ -1,4 +1,4 @@
-# Roihu centralized evaluation
+# Roihu scientific execution
 
 The verified environment is project_2015302 on aarch64 with Python 3.12.12 and PyTorch 2.10.0+cu130 built for CUDA 13.0. Each reserved NVIDIA GH200 couples a 72-core Grace CPU with 120 GiB of CPU memory and a Hopper GPU with approximately 96 GiB of HBM. Roihu exposes up to 217 GiB of combined allocatable memory associated with one reserved GH200; this must not be interpreted as 120 GiB of GPU HBM. See CSC's [Roihu system description](https://docs.csc.fi/computing/systems-roihu/) and [partition limits](https://docs.csc.fi/computing/running/batch-job-partitions/).
 
@@ -59,7 +59,11 @@ The FedAvg launcher uses `gpumedium`, one GH200, one Slurm task, and 72 CPU core
 
 Data are read from `$WORK_DIR/data/shd`. Federated runs, generated summaries, job-level telemetry, and Slurm logs are written under `$WORK_DIR/runs/federated`, `$WORK_DIR/results/federated`, `$WORK_DIR/telemetry/federated`, and `$WORK_DIR/slurm-logs/federated`. The launcher does not download data and exits if CUDA or either official SHD file is unavailable.
 
-Submit after human review:
+The federated baseline ran as Slurm array `189464` from Git commit `29ad1558dff52b856ee35b6ce2f538ec2006594a`. All six independent tasks completed on `gpumedium` with exit code `0:0`, using one GH200 reservation per task. The [federated summary](../../results/federated/federated_summary.md) contains the valid three-seed aggregation, and the [federated scientific record](../../thesis_records/federated_baseline.md) documents its interpretation and limitations.
+
+The requested 36-hour limit was a scheduler constraint, not the actual runtime. The 72 CPU cores and memory attached to each GH200 reservation are scheduler resources and must not be reported as separate FedAvg algorithmic resources.
+
+The canonical reproduction command is:
 
 ~~~bash
 bash scripts/slurm/submit_roihu_federated.sh \
@@ -75,7 +79,7 @@ squeue --job <JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
 
 Compatible interrupted executions may be submitted with the same command. The array invokes `--resume-auto`, which skips completed compatible records and resumes compatible records from `checkpoints/last.pt`.
 
-Aggregate after all six tasks complete:
+Aggregate compatible accepted records with:
 
 ~~~bash
 fedapfa-summarize-federated \
@@ -88,4 +92,4 @@ fedapfa-summarize-federated \
 
 The array tests each requested `nvidia-smi` field, records unsupported fields explicitly, and samples supported timestamp, identity, utilization, memory, power, and temperature fields every two seconds. It records the sampling command and interval, starts collection before training, and stops the background process on success, failure, or signal while preserving collected CSV data.
 
-This telemetry describes the allocated GPU job. It does not isolate individual client work, does not measure communication traffic, and must not be labelled per-client, neural-model, or neuromorphic energy. No federated GPU telemetry or scientific accuracy evidence has yet been collected.
+This telemetry describes the allocated GPU job. It does not isolate individual client work, does not measure communication traffic, and must not be labelled per-client, neural-model, or neuromorphic energy. The committed federated evidence does not report device-utilization or energy estimates. Logical communication is tensor accounting rather than physical network measurement. Successful GH200 execution therefore does not demonstrate low-energy SNN operation or FPGA-equivalent or neuromorphic energy efficiency.

@@ -14,6 +14,8 @@ Only validated scientific records with compatible protocols may enter the analys
 
 ## Evidence collected
 
+The validated [SHD FedAvg baseline](federated_baseline.md) is available as the prerequisite reference.
+
 No scientific evidence has yet been recorded for this evaluation.
 
 ## Unresolved scientific limitations
