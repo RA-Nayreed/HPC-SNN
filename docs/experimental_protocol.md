@@ -82,3 +82,27 @@ Completion requires all 100 rounds, valid partition integrity, 20 clients, the c
 ### Collected federated evidence
 
 All six mandatory scientific executions completed and passed aggregation validation for both treatments and seeds 7, 17, and 27. The [federated summary](../results/federated/federated_summary.md) records the measurements, and the [federated scientific record](../thesis_records/federated_baseline.md) separates evidence, interpretation, and limitations. Observed results do not alter the partition, selection, test-isolation, or acceptance rules in this methods document.
+
+## Corrected CIFAR-10 Fed-SNN evaluation
+
+The active manifest `experiments/published_fedsnn/manifest.yaml` contains the two CIFAR-10 SNN 10/2 Table I treatments crossed with seeds 7, 17, and 27. `cifar10_fedsnn_paper_reported_iid_evaluation` assigns the complete training collection evenly to ten clients with nearly equal class proportions. `cifar10_fedsnn_paper_reported_noniid_evaluation` uses the released balanced label-Dirichlet algorithm with alpha 0.5 and minimum client size ten. Distribution and its associated provenance fields are the only intended treatment difference.
+
+Both configurations use ten total clients, two selected clients, 100 communication rounds, five local epochs, local batch size 32, SGD learning rate 0.1, momentum 0.95, source-default weight decay `1e-4`, no gradient clipping, uniform selected-client averaging, and final-round checkpoint selection. The paper supplies five local epochs, momentum 0.95, reductions after rounds 40, 60, and 80, final reporting after round 100, all 50,000 training examples, and three repetitions. The released two-local-epoch IID command is implementation evidence, not an active Table I treatment.
+
+CIFAR-10 is represented in `[-1,1]` as `2x-1`, without crop or flip. Each input timestep uses `1(2U <= |x|) sign(x)` with an explicit generator. S-VGG9 uses seven convolutions, two linear layers, 20 timesteps, leak 0.95, threshold 1, the scale-0.3 triangular surrogate, BNTT momentum 0.1 and epsilon `1e-4`, temporal-mean readout, and Xavier uniform gain-2 initialization for convolution and linear weights only.
+
+Incomplete local batches are dropped. Client records preserve both partition population and examples presented after dropping remainders. Uniform aggregation includes every floating tensor in the state dictionary, including BNTT running means and variances. SHD continues using retained local batches and example-count aggregation.
+
+All 50,000 standard training images are eligible for client partitioning and occur in exactly one client partition. No internal validation collection or validation loader exists. The round-100 `last.pt` checkpoint is selected neutrally as the final-round checkpoint; a `best.pt` checkpoint and best-validation metric are neither created nor required. The official 10,000-image test collection, which the paper calls its validation collection, is inaccessible during training and is evaluated exactly once after round 100. This is not procedure-for-procedure equivalent to the released program, which monitors that collection during training.
+
+The configured rate is 0.1 for rounds 1–40, 0.02 for rounds 41–60, 0.004 for rounds 61–80, and 0.0008 for rounds 81–100. The reduction occurs only after each boundary round has completed. The 20-timestep value, signed representation, dropped local remainder, uniform averaging, Xavier gain-2 initialization, temporal-mean readout, BNTT epsilon `1e-4`, and weight decay `1e-4` come from the pinned source; the paper does not state the SNN timestep count or weight decay.
+
+The paper’s 76.44% IID and 73.94% non-IID values are descriptive only. No tolerance or acceptance threshold is configured. Reports retain `equivalence_not_established` and show signed and absolute percentage-point differences without automatically declaring reproduction success.
+
+Remaining discrepancies include the paper’s example-count aggregation equation versus released `Fed.py` uniform aggregation, omitted paper values for timesteps and SNN weight decay, released-source official-test monitoring versus one final project evaluation, and the project training selected clients only while the authors compute every client update before choosing uploaded states.
+
+The earlier CIFAR-10 implementation completed with 18.23–26.79% official-test accuracy but used an incompatible representation, encoder, readout, initialization, timestep count, BNTT epsilon, loader rule, partition, and aggregation rule. Its configuration is retained outside the active manifest, and its generated evidence is unchanged.
+
+## Centralized CIFAR-10 learning verification
+
+`experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml` uses the corrected data representation and S-VGG9 model with a distinct `runs/fedsnn_centralized_verification` identity. It fits the 45,000-example training subset, selects by the 5,000-example validation subset, and evaluates the official test once. This configuration is intended to verify learning before any corrected federated execution; it is not part of the six-task federated manifest and has not been executed as part of this correction.

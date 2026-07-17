@@ -9,7 +9,7 @@ import sys
 
 from fedapfa.configuration import expand_sweep, load_config, validate_config
 from fedapfa.models.model_factory import make_model
-from fedapfa.training.centralized import resolve_device, train_centralized
+from fedapfa.training.centralized import resolve_device, seed_everything, train_centralized
 from fedapfa.training.protocols import prepare_datasets
 from fedapfa.utilities.run_records import initialize_run, plan_run
 
@@ -51,6 +51,8 @@ def main() -> None:
         if action.skip_completed:
             print(f"completed run already exists; skipping: {action.run_dir}")
             continue
+        if config["dataset"]["name"] == "cifar10":
+            seed_everything(config["seed"])
         model = make_model(config)
         resolve_device(config["device"])
         bundle = prepare_datasets(config)

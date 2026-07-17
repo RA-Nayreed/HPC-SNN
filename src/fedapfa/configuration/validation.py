@@ -6,8 +6,14 @@ from collections.abc import Mapping
 from pathlib import Path
 from typing import Any
 
-DATASETS = {"shd": 20, "ssc": 35}
-MODELS = {("shd", "lif_2layer"), ("shd", "dcls_shd"), ("ssc", "lif_2layer_128"), ("ssc", "lif_2layer_512")}
+DATASETS = {"shd": 20, "ssc": 35, "cifar10": 10}
+MODELS = {
+    ("shd", "lif_2layer"),
+    ("shd", "dcls_shd"),
+    ("ssc", "lif_2layer_128"),
+    ("ssc", "lif_2layer_512"),
+    ("cifar10", "svgg9_bntt"),
+}
 ATTENTION = {"none", "equation", "public_behavior"}
 PROTOCOLS = {"published_protocol", "independent_evaluation", "memorization_validation", "reduced_sample_evaluation"}
 MODES = {"memorization_validation", "reduced_sample_evaluation", "scientific_evaluation", "sweep"}
@@ -16,6 +22,7 @@ EXPECTED_MODEL_CLASSES = {
     "lif_2layer_128": "AudioLIFSNN",
     "lif_2layer_512": "AudioLIFSNN",
     "dcls_shd": "DCLSSHDSNN",
+    "svgg9_bntt": "SVGG9BNTT",
 }
 
 
@@ -60,9 +67,12 @@ def validate_config(config: Mapping[str, Any]) -> None:
     dataset_name = dataset.get("name")
     if dataset_name not in DATASETS:
         raise ConfigurationError(f"unknown dataset: {dataset_name}")
-    for key in ("root", "train_file", "test_file"):
-        if not isinstance(dataset.get(key), str) or not dataset[key]:
-            raise ConfigurationError(f"dataset.{key} must be a path string")
+    if not isinstance(dataset.get("root"), str) or not dataset["root"]:
+        raise ConfigurationError("dataset.root must be a path string")
+    if dataset_name != "cifar10":
+        for key in ("train_file", "test_file"):
+            if not isinstance(dataset.get(key), str) or not dataset[key]:
+                raise ConfigurationError(f"dataset.{key} must be a path string")
     validation_file = dataset.get("validation_file")
     if dataset_name == "ssc" and (not isinstance(validation_file, str) or not validation_file):
         raise ConfigurationError("ssc requires dataset.validation_file")
@@ -70,12 +80,36 @@ def validate_config(config: Mapping[str, Any]) -> None:
         raise ConfigurationError("shd dataset.validation_file must be null or a path string")
     if dataset.get("classes") != DATASETS[dataset_name]:
         raise ConfigurationError(f"{dataset_name} requires {DATASETS[dataset_name]} classes")
-    if dataset.get("raw_channels") != 700 or dataset.get("input_features") != 140:
-        raise ConfigurationError("event audio requires 700 raw channels and 140 input features")
-    if dataset.get("frequency_bin_factor") != 5:
-        raise ConfigurationError("frequency_bin_factor must be 5")
-    if dataset.get("temporal_bin_ms") != 10.0:
-        raise ConfigurationError("temporal_bin_ms must be 10.0")
+    if dataset_name == "cifar10":
+        expected = {
+            "classes": 10,
+            "channels": 3,
+            "image_size": 32,
+            "validation_fraction": 0.1,
+            "standard_train_split": True,
+            "standard_test_split": True,
+            "download_during_training": False,
+        }
+        if any(dataset.get(key) != value for key, value in expected.items()):
+            raise ConfigurationError("centralized CIFAR-10 dataset settings are incompatible")
+        transforms = _mapping(dataset, "transforms")
+        augmentation = _mapping(transforms, "augmentation")
+        if transforms.get("normalization") != "signed_minus_one_one":
+            raise ConfigurationError("centralized CIFAR-10 requires signed_minus_one_one normalization")
+        if augmentation != {
+            "random_crop": False,
+            "crop_padding": 0,
+            "horizontal_flip": False,
+            "horizontal_flip_probability": 0.0,
+        }:
+            raise ConfigurationError("centralized CIFAR-10 source representation disables crop and flip")
+    else:
+        if dataset.get("raw_channels") != 700 or dataset.get("input_features") != 140:
+            raise ConfigurationError("event audio requires 700 raw channels and 140 input features")
+        if dataset.get("frequency_bin_factor") != 5:
+            raise ConfigurationError("frequency_bin_factor must be 5")
+        if dataset.get("temporal_bin_ms") != 10.0:
+            raise ConfigurationError("temporal_bin_ms must be 10.0")
     validation_fraction = dataset.get("validation_fraction", 0.1)
     if not 0 < validation_fraction < 1:
         raise ConfigurationError("validation_fraction must be between zero and one")
@@ -85,42 +119,74 @@ def validate_config(config: Mapping[str, Any]) -> None:
     if combination not in MODELS:
         raise ConfigurationError(f"unknown dataset/model combination: {combination}")
     hidden = model.get("hidden_dims")
-    if not isinstance(hidden, list) or len(hidden) != 2 or any(not isinstance(v, int) or v <= 0 for v in hidden):
-        raise ConfigurationError("model.hidden_dims must contain two positive integers")
     required_hidden = {
         "lif_2layer": [256, 256],
         "dcls_shd": [256, 256],
         "lif_2layer_128": [128, 128],
         "lif_2layer_512": [512, 512],
     }
-    if hidden != required_hidden[model["name"]]:
-        raise ConfigurationError(f"{model['name']} requires hidden_dims={required_hidden[model['name']]}")
-    if not isinstance(model.get("dropout"), (int, float)) or not 0 <= model["dropout"] < 1:
-        raise ConfigurationError("model.dropout must be in [0, 1)")
-    for key in ("batch_normalization", "bias"):
-        if not isinstance(model.get(key), bool):
-            raise ConfigurationError(f"model.{key} must be boolean")
-    neuron = _mapping(model, "neuron")
-    if neuron.get("name") not in {"euler_lif", "spikingjelly_lif"}:
-        raise ConfigurationError(f"unknown neuron: {neuron.get('name')}")
-    _positive(neuron, "tau_ms")
-    _positive(neuron, "threshold")
-    if neuron.get("reset") not in {"subtract", "zero"} or neuron.get("detach_reset") is not True:
-        raise ConfigurationError("neuron requires subtract/zero reset and detach_reset=true")
-    surrogate = _mapping(neuron, "surrogate")
-    if surrogate.get("name") != "atan":
-        raise ConfigurationError("only atan surrogate is supported")
-    _positive(surrogate, "alpha")
-    attention = _mapping(model, "attention")
-    if attention.get("variant") not in ATTENTION:
-        raise ConfigurationError(f"unknown attention variant: {attention.get('variant')}")
-    _positive(attention, "lambda")
+    if model["name"] == "svgg9_bntt":
+        expected_model = {
+            "channels": [64, 64, 128, 128, 256, 256, 256],
+            "average_pool_after_convolution": [2, 4, 7],
+            "linear_hidden": 1024,
+            "timesteps": 20,
+            "leak": 0.95,
+            "threshold": 1.0,
+            "surrogate_scale": 0.3,
+            "bntt_momentum": 0.1,
+            "bntt_epsilon": 0.0001,
+            "input_encoding": "signed_poisson",
+            "poisson_rescale_factor": 2.0,
+            "readout": "temporal_mean",
+            "weight_initialization": "xavier_uniform_gain_2",
+        }
+        if any(model.get(key) != value for key, value in expected_model.items()):
+            raise ConfigurationError("centralized corrected S-VGG9 BNTT settings are incompatible")
+    else:
+        if not isinstance(hidden, list) or len(hidden) != 2 or any(not isinstance(v, int) or v <= 0 for v in hidden):
+            raise ConfigurationError("model.hidden_dims must contain two positive integers")
+        if hidden != required_hidden[model["name"]]:
+            raise ConfigurationError(f"{model['name']} requires hidden_dims={required_hidden[model['name']]}")
+        if not isinstance(model.get("dropout"), (int, float)) or not 0 <= model["dropout"] < 1:
+            raise ConfigurationError("model.dropout must be in [0, 1)")
+        for key in ("batch_normalization", "bias"):
+            if not isinstance(model.get(key), bool):
+                raise ConfigurationError(f"model.{key} must be boolean")
+        neuron = _mapping(model, "neuron")
+        if neuron.get("name") not in {"euler_lif", "spikingjelly_lif"}:
+            raise ConfigurationError(f"unknown neuron: {neuron.get('name')}")
+        _positive(neuron, "tau_ms")
+        _positive(neuron, "threshold")
+        if neuron.get("reset") not in {"subtract", "zero"} or neuron.get("detach_reset") is not True:
+            raise ConfigurationError("neuron requires subtract/zero reset and detach_reset=true")
+        surrogate = _mapping(neuron, "surrogate")
+        if surrogate.get("name") != "atan":
+            raise ConfigurationError("only atan surrogate is supported")
+        _positive(surrogate, "alpha")
+        attention = _mapping(model, "attention")
+        if attention.get("variant") not in ATTENTION:
+            raise ConfigurationError(f"unknown attention variant: {attention.get('variant')}")
+        _positive(attention, "lambda")
 
     training = _mapping(config, "training")
-    if training.get("optimizer") != "adam":
-        raise ConfigurationError("only adam optimizer is supported")
-    for key in ("learning_rate", "gradient_clip", "delay_lr_multiplier"):
-        _positive(training, key)
+    if dataset_name == "cifar10":
+        if training.get("optimizer") != "sgd" or training.get("momentum") != 0.95:
+            raise ConfigurationError("centralized CIFAR-10 requires SGD momentum 0.95")
+        if training.get("learning_rate_reduction_rounds") != [40, 60, 80]:
+            raise ConfigurationError("centralized CIFAR-10 reductions must be [40, 60, 80]")
+        if training.get("learning_rate_reduction_factor") != 5:
+            raise ConfigurationError("centralized CIFAR-10 reduction factor must be 5")
+        if training.get("gradient_clip") is not None:
+            raise ConfigurationError("centralized CIFAR-10 gradient clipping must be disabled")
+        if training.get("checkpoint_selection") != "best_validation":
+            raise ConfigurationError("centralized CIFAR-10 requires best_validation selection")
+        _positive(training, "learning_rate")
+    else:
+        if training.get("optimizer") != "adam":
+            raise ConfigurationError("event-audio training requires Adam")
+        for key in ("learning_rate", "gradient_clip", "delay_lr_multiplier"):
+            _positive(training, key)
     for key in ("batch_size", "epochs"):
         value = training.get(key)
         if not isinstance(value, int) or isinstance(value, bool) or value <= 0:

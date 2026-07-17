@@ -109,9 +109,40 @@ def load_heterogeneity_manifest(path: str | Path) -> list[ManifestTask]:
 
 
 def load_published_fedsnn_manifest(path: str | Path) -> list[ManifestTask]:
-    tasks = _load_tasks(path, "published_fedsnn", 1)
-    if len(tasks) != 3 or {task.dataset for task in tasks} != {"cifar10"}:
-        raise ValueError("published Fed-SNN manifest must expand to exactly three CIFAR-10 tasks")
+    tasks = _load_tasks(path, "published_fedsnn", 2)
+    if len(tasks) != 6 or {task.dataset for task in tasks} != {"cifar10"}:
+        raise ValueError("published Fed-SNN manifest must expand to exactly six CIFAR-10 tasks")
+    templates = [tasks[index].config for index in range(0, len(tasks), 3)]
+    if {config["protocol"] for config in templates} != {"paper_reported_evaluation"}:
+        raise ValueError("published Fed-SNN manifest has an incompatible protocol matrix")
+    if {config["name"] for config in templates} != {
+        "cifar10_fedsnn_paper_reported_iid_evaluation",
+        "cifar10_fedsnn_paper_reported_noniid_evaluation",
+    }:
+        raise ValueError("published Fed-SNN manifest has incompatible Table I experiment identities")
+    if len({_fixed_training_identity(config).__repr__() for config in templates}) != 1:
+        raise ValueError("published Fed-SNN configurations differ outside distribution-specific fields")
+    treatments = {
+        (
+            config["name"],
+            config["federated"]["local_epochs"],
+            config["federated"]["partition"]["method"],
+            config["federated"]["partition"].get("alpha"),
+            config["acceptance"]["descriptive_reference_accuracy"],
+        )
+        for config in templates
+    }
+    if treatments != {
+        ("cifar10_fedsnn_paper_reported_iid_evaluation", 5, "fedsnn_random_iid", None, 0.7644),
+        (
+            "cifar10_fedsnn_paper_reported_noniid_evaluation",
+            5,
+            "fedsnn_balanced_label_dirichlet",
+            0.5,
+            0.7394,
+        ),
+    }:
+        raise ValueError("published Fed-SNN manifest has an incompatible treatment matrix")
     return tasks
 
 
@@ -124,9 +155,7 @@ def load_heterogeneity_context_tasks(manifest_path: str | Path) -> list[ContextT
     summary_path = (path.parent / context.get("summary", "")).resolve()
     summary = _manifest_mapping(summary_path)
     matching = [
-        value
-        for value in summary.get("experiments", [])
-        if value.get("experiment") == context.get("experiment")
+        value for value in summary.get("experiments", []) if value.get("experiment") == context.get("experiment")
     ]
     if len(matching) != 1 or matching[0].get("completed") is not True:
         raise ValueError("exactly one completed contextual experiment is required")

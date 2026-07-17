@@ -18,6 +18,8 @@ The validated [SHD FedAvg baseline](federated_baseline.md) is available as the p
 
 No scientific evidence has yet been recorded for this evaluation.
 
+The planned corrected CIFAR-10 Fed-SNN Table I matrix compares IID with alpha-0.5 non-IID allocation while keeping the other scientific settings fixed. It is protocol verification, not evidence for this SHD heterogeneity record. Its future measurements must remain in the separate, non-pooled Fed-SNN summary and cannot be imported here without a separately declared cross-dataset analysis.
+
 ## Unresolved scientific limitations
 
 Treatment validity and cross-client comparability remain unmeasured.

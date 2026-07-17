@@ -35,15 +35,16 @@ PY
 nvidia-smi
 python3 -m fedapfa.cli.scientific_manifest validate --manifest "${MANIFEST}"
 task_count="$(python3 -m fedapfa.cli.scientific_manifest count --manifest "${MANIFEST}")"
-[[ "${task_count}" == "3" ]] || { echo "published protocol manifest must contain 3 tasks" >&2; exit 2; }
+[[ "${task_count}" == "6" ]] || { echo "corrected Fed-SNN manifest must contain 6 tasks" >&2; exit 2; }
 task="$(python3 -m fedapfa.cli.scientific_manifest task --manifest "${MANIFEST}" --index "${SLURM_ARRAY_TASK_ID}")"
 IFS=$'\t' read -r config seed dataset mode protocol experiment participation <<< "${task}"
-[[ "${dataset}" == "cifar10" && "${mode}" == "scientific_evaluation" && "${protocol}" == "published_protocol" ]] || {
-    echo "incompatible published protocol task" >&2; exit 2;
+[[ "${dataset}" == "cifar10" && "${mode}" == "scientific_evaluation" && \
+    "${protocol}" == "paper_reported_evaluation" ]] || {
+    echo "incompatible corrected Fed-SNN task" >&2; exit 2;
 }
 data_root="${WORK}/data/cifar10"
-runs_root="${WORK}/runs/published_fedsnn"
-telemetry_root="${WORK}/telemetry/published_fedsnn"
+runs_root="${WORK}/runs/fedsnn_paper_evaluation"
+telemetry_root="${WORK}/telemetry/fedsnn_paper_evaluation"
 mkdir -p "${runs_root}" "${telemetry_root}"
 [[ -f "${data_root}/cifar-10-batches-py/data_batch_1" ]] || { echo "CIFAR-10 training files are unavailable" >&2; exit 2; }
 job_label="${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID}}_${SLURM_ARRAY_TASK_ID}"

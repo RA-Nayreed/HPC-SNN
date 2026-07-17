@@ -17,6 +17,34 @@ def test_unequal_client_sizes_produce_exact_weighted_average():
     assert torch.equal(state["weight"], torch.tensor([4.0, 6.0]))
 
 
+def test_uniform_average_uses_exact_equal_weights_and_aggregates_running_statistics():
+    inputs = [
+        AggregationInput(
+            "a",
+            1,
+            {
+                "weight": torch.tensor([1.0, 3.0]),
+                "bntt.running_mean": torch.tensor([2.0]),
+                "bntt.running_variance": torch.tensor([4.0]),
+            },
+        ),
+        AggregationInput(
+            "b",
+            9,
+            {
+                "weight": torch.tensor([5.0, 7.0]),
+                "bntt.running_mean": torch.tensor([6.0]),
+                "bntt.running_variance": torch.tensor([8.0]),
+            },
+        ),
+    ]
+    state, weights = weighted_fedavg(inputs, "uniform")
+    assert weights == [0.5, 0.5]
+    assert torch.equal(state["weight"], torch.tensor([3.0, 5.0]))
+    assert torch.equal(state["bntt.running_mean"], torch.tensor([4.0]))
+    assert torch.equal(state["bntt.running_variance"], torch.tensor([6.0]))
+
+
 def test_one_client_average_equals_its_local_result():
     item = _input("only", 9, [0.125, -2.5])
     state, weights = weighted_fedavg([item])
@@ -37,3 +65,5 @@ def test_empty_or_incompatible_updates_are_rejected():
     second = AggregationInput("b", 1, {"other": torch.tensor([1.0])})
     with pytest.raises(ValueError, match="incompatible"):
         weighted_fedavg([first, second])
+    with pytest.raises(ValueError, match="unsupported aggregation"):
+        weighted_fedavg([first], "unknown")

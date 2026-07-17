@@ -93,3 +93,46 @@ fedapfa-summarize-federated \
 The array tests each requested `nvidia-smi` field, records unsupported fields explicitly, and samples supported timestamp, identity, utilization, memory, power, and temperature fields every two seconds. It records the sampling command and interval, starts collection before training, and stops the background process on success, failure, or signal while preserving collected CSV data.
 
 This telemetry describes the allocated GPU job. It does not isolate individual client work, does not measure communication traffic, and must not be labelled per-client, neural-model, or neuromorphic energy. The committed federated evidence does not report device-utilization or energy estimates. Logical communication is tensor accounting rather than physical network measurement. Successful GH200 execution therefore does not demonstrate low-energy SNN operation or FPGA-equivalent or neuromorphic energy efficiency.
+
+## Corrected CIFAR-10 Fed-SNN execution
+
+The corrected array contains six tasks, reserves one GH200 per task, uses `gpumedium`, and remains within the 36-hour limit. Maximum simultaneous tasks remain user-controlled. CIFAR-10 must already exist at `$WORK_DIR/data/cifar10`; neither launcher nor trainer downloads it.
+
+Submit the corrected federated matrix:
+
+~~~bash
+bash scripts/slurm/submit_roihu_published_fedsnn.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
+  --max-parallel 1
+~~~
+
+Runs, results, telemetry, and Slurm output are isolated under `$WORK_DIR/{runs,results,telemetry,slurm-logs}/fedsnn_paper_evaluation`. Compatible interrupted tasks resume from their own `last.pt`; prior `runs/published_fedsnn`, `runs/fedsnn_corrected`, and superseded experiment identities are incompatible. The two active tasks use all 50,000 training examples, no internal validation loader, final-round selection, and one official-test evaluation after round 100.
+
+Monitor and inspect accounting:
+
+~~~bash
+squeue --job <JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+sacct -j <JOB_ID> --array \
+  --format=JobID,State,ExitCode,Elapsed,Start,End,AllocTRES
+~~~
+
+Summarize only after the six corrected tasks exist:
+
+~~~bash
+fedapfa-summarize-published-fedsnn \
+  --manifest experiments/published_fedsnn/manifest.yaml \
+  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/fedsnn_paper_evaluation" \
+  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/fedsnn_paper_evaluation"
+~~~
+
+Before another federated execution, run the centralized learning verification from a one-GPU Roihu allocation after loading `python-pytorch/2.10` and activating the established environment:
+
+~~~bash
+python3 -m fedapfa.cli.train_centralized \
+  experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml \
+  --data-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/data/cifar10" \
+  --output-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/fedsnn_centralized_verification" \
+  --device cuda --resume-auto
+~~~
+
+The centralized command is documented but was not run or submitted during the correction.

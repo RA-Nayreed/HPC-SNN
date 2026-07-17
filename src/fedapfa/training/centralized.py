@@ -12,6 +12,7 @@ import numpy as np
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
+from torch.utils.data._utils.collate import default_collate
 
 from fedapfa.datasets.sequence_collation import EventBatch, collate_event_sequences
 from fedapfa.training.acceptance import evaluate_acceptance
@@ -48,6 +49,7 @@ def make_loader(dataset, config, shuffle, generator=None):
         return None
     training = config["training"]
     generator = generator or torch.Generator().manual_seed(config["seed"])
+    collate = collate_event_sequences if getattr(dataset, "fedapfa_batch_kind", None) != "image" else default_collate
     return DataLoader(
         dataset,
         batch_size=training["batch_size"],
@@ -55,7 +57,7 @@ def make_loader(dataset, config, shuffle, generator=None):
         num_workers=training["data_loader_workers"],
         persistent_workers=training["persistent_workers"],
         pin_memory=config["device"] == "cuda",
-        collate_fn=collate_event_sequences,
+        collate_fn=collate,
         worker_init_fn=seed_worker,
         generator=generator,
     )
@@ -63,6 +65,13 @@ def make_loader(dataset, config, shuffle, generator=None):
 
 def make_optimizer(model, config):
     training = config["training"]
+    if training["optimizer"] == "sgd":
+        return torch.optim.SGD(
+            model.parameters(),
+            lr=training["learning_rate"],
+            momentum=training["momentum"],
+            weight_decay=training["weight_decay"],
+        )
     delay = list(model.delay_parameters()) if hasattr(model, "delay_parameters") else []
     delay_ids = {id(parameter) for parameter in delay}
     ordinary = [parameter for parameter in model.parameters() if id(parameter) not in delay_ids]
@@ -78,8 +87,24 @@ def make_optimizer(model, config):
     return torch.optim.Adam(groups, weight_decay=training["weight_decay"])
 
 
-def _move(batch: EventBatch, device, non_blocking):
-    return EventBatch(*(value.to(device, non_blocking=non_blocking) for value in batch))
+def _move(batch, device, non_blocking):
+    if isinstance(batch, EventBatch):
+        return EventBatch(*(value.to(device, non_blocking=non_blocking) for value in batch))
+    inputs, labels = batch
+    return (
+        inputs.to(device, non_blocking=non_blocking),
+        labels.to(device, non_blocking=non_blocking),
+    )
+
+
+def _model_generator(device: torch.device, seed: int) -> torch.Generator:
+    target = device if device.type == "cuda" else torch.device("cpu")
+    return torch.Generator(device=target).manual_seed(seed)
+
+
+def _learning_rate_for_epoch(training: dict, epoch_number: int) -> float:
+    reductions = sum(epoch_number > boundary for boundary in training.get("learning_rate_reduction_rounds", []))
+    return float(training["learning_rate"]) / (float(training.get("learning_rate_reduction_factor", 1.0)) ** reductions)
 
 
 def _attention_stats(model):
@@ -91,7 +116,15 @@ def _attention_stats(model):
     return values
 
 
-def run_epoch(model, loader, device, optimizer=None, max_batches=None, gradient_clip=1.0):
+def run_epoch(
+    model,
+    loader,
+    device,
+    optimizer=None,
+    max_batches=None,
+    gradient_clip=1.0,
+    generator: torch.Generator | None = None,
+):
     training = optimizer is not None
     model.train(training)
     criterion = nn.CrossEntropyLoss()
@@ -109,26 +142,35 @@ def run_epoch(model, loader, device, optimizer=None, max_batches=None, gradient_
             batch = _move(batch, device, non_blocking)
             if training:
                 optimizer.zero_grad(set_to_none=True)
-            logits, rates = model(batch.inputs, batch.lengths)
-            loss = criterion(logits, batch.labels)
+            if isinstance(batch, EventBatch):
+                logits, rates = model(batch.inputs, batch.lengths)
+                labels = batch.labels
+                rate_weight = int(batch.valid_mask.sum())
+            else:
+                if generator is None:
+                    raise ValueError("image training requires an explicit model generator")
+                inputs, labels = batch
+                logits, rates = model(inputs, generator=generator)
+                rate_weight = len(labels)
+            loss = criterion(logits, labels)
             if training:
                 loss.backward()
-                torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
+                if gradient_clip is not None:
+                    torch.nn.utils.clip_grad_norm_(model.parameters(), gradient_clip)
                 optimizer.step()
-            count = len(batch.labels)
+            count = len(labels)
             total += count
-            correct += int((logits.argmax(1) == batch.labels).sum())
+            correct += int((logits.argmax(1) == labels).sum())
             loss_sum += float(loss.detach()) * count
             batches += 1
-            valid_steps = int(batch.valid_mask.sum())
             for name, value in rates.items():
-                rate_sums[name] = rate_sums.get(name, 0.0) + float(value.detach()) * valid_steps
-                rate_weights[name] = rate_weights.get(name, 0) + valid_steps
+                rate_sums[name] = rate_sums.get(name, 0.0) + float(value.detach()) * rate_weight
+                rate_weights[name] = rate_weights.get(name, 0) + rate_weight
             for module_name, statistics in _attention_stats(model).items():
                 sums = attention_sums.setdefault(module_name, {})
                 for statistic, value in statistics.items():
-                    sums[statistic] = sums.get(statistic, 0.0) + value * valid_steps
-                attention_weights[module_name] = attention_weights.get(module_name, 0) + valid_steps
+                    sums[statistic] = sums.get(statistic, 0.0) + value * rate_weight
+                attention_weights[module_name] = attention_weights.get(module_name, 0) + rate_weight
     if not total:
         raise RuntimeError("loader produced no batches")
     return {
@@ -233,12 +275,29 @@ def train_centralized(model, bundle, config, run_dir, resume_checkpoint=None):
             if device.type == "cuda":
                 torch.cuda.reset_peak_memory_stats(device)
             started = time.monotonic()
+            if training["optimizer"] == "sgd":
+                learning_rate = _learning_rate_for_epoch(training, epoch + 1)
+                for group in optimizer.param_groups:
+                    group["lr"] = learning_rate
             train_metrics = run_epoch(
-                model, train_loader, device, optimizer, training["max_train_batches"], training["gradient_clip"]
+                model,
+                train_loader,
+                device,
+                optimizer,
+                training["max_train_batches"],
+                training["gradient_clip"],
+                _model_generator(device, config["seed"] + 1000003 * (epoch + 1)),
             )
             global_step += train_metrics["batches"]
             validation_metrics = (
-                run_epoch(model, validation_loader, device, None, training["max_validation_batches"])
+                run_epoch(
+                    model,
+                    validation_loader,
+                    device,
+                    None,
+                    training["max_validation_batches"],
+                    generator=_model_generator(device, config["seed"] + 2000003 * (epoch + 1)),
+                )
                 if validation_loader
                 else None
             )
@@ -333,7 +392,14 @@ def train_centralized(model, bundle, config, run_dir, resume_checkpoint=None):
                 json.dumps(bundle.selected_indices, indent=2, sort_keys=True), encoding="utf-8"
             )
         test_loader = make_loader(test_dataset, config, False)
-        final["test"] = run_epoch(model, test_loader, device, None, training["max_test_batches"])
+        final["test"] = run_epoch(
+            model,
+            test_loader,
+            device,
+            None,
+            training["max_test_batches"],
+            generator=_model_generator(device, config["seed"] + 3000001),
+        )
     elif bundle.test:
         logger.error("selected checkpoint is missing; official test evaluation was not run")
 

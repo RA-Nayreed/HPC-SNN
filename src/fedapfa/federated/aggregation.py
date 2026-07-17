@@ -1,4 +1,4 @@
-"""Validated sample-count-weighted Federated Averaging."""
+"""Validated configurable Federated Averaging."""
 
 from __future__ import annotations
 
@@ -30,9 +30,7 @@ def state_l2_norm(state: dict[str, torch.Tensor]) -> float:
     return result
 
 
-def state_difference_l2_norm(
-    first: dict[str, torch.Tensor], second: dict[str, torch.Tensor]
-) -> float:
+def state_difference_l2_norm(first: dict[str, torch.Tensor], second: dict[str, torch.Tensor]) -> float:
     if set(first) != set(second):
         raise ValueError("state dictionaries have incompatible keys")
     squared = 0.0
@@ -88,13 +86,19 @@ def state_difference_cosine_similarity(
     return min(1.0, max(-1.0, result))
 
 
-def aggregation_weights(inputs: list[AggregationInput]) -> list[float]:
+def aggregation_weights(inputs: list[AggregationInput], policy: str = "example_count") -> list[float]:
     if not inputs:
         raise ValueError("cannot aggregate an empty client-update collection")
     if any(not isinstance(item.example_count, int) or item.example_count <= 0 for item in inputs):
         raise ValueError("client example counts must be positive integers")
-    total = sum(item.example_count for item in inputs)
-    weights = [item.example_count / total for item in inputs]
+    if policy == "uniform":
+        weight = 1.0 / len(inputs)
+        weights = [weight for _ in inputs]
+    elif policy == "example_count":
+        total = sum(item.example_count for item in inputs)
+        weights = [item.example_count / total for item in inputs]
+    else:
+        raise ValueError(f"unsupported aggregation weighting: {policy}")
     if any(not math.isfinite(value) or value < 0 for value in weights):
         raise ValueError("aggregation weights must be finite and nonnegative")
     if not math.isclose(sum(weights), 1.0, rel_tol=0.0, abs_tol=1e-12):
@@ -102,8 +106,10 @@ def aggregation_weights(inputs: list[AggregationInput]) -> list[float]:
     return weights
 
 
-def weighted_fedavg(inputs: list[AggregationInput]) -> tuple[dict[str, torch.Tensor], list[float]]:
-    weights = aggregation_weights(inputs)
+def weighted_fedavg(
+    inputs: list[AggregationInput], policy: str = "example_count"
+) -> tuple[dict[str, torch.Tensor], list[float]]:
+    weights = aggregation_weights(inputs, policy)
     reference = inputs[0].state_dict
     if not reference:
         raise ValueError("client state dictionary is empty")

@@ -30,7 +30,17 @@ def test_training_arrays_use_automatic_resume_and_required_task_counts():
     heterogeneity = (ROOT / "scripts/slurm/heterogeneity_array.sbatch").read_text(encoding="utf-8")
     published = (ROOT / "scripts/slurm/published_fedsnn_array.sbatch").read_text(encoding="utf-8")
     assert "--resume-auto" in heterogeneity and '"9"' in heterogeneity
-    assert "--resume-auto" in published and '"3"' in published
+    assert "--resume-auto" in published and '"6"' in published
+    assert '--array="0-5%${max_parallel}"' in (ROOT / "scripts/slurm/submit_roihu_published_fedsnn.sh").read_text(
+        encoding="utf-8"
+    )
+    for text in (
+        published,
+        (ROOT / "scripts/slurm/submit_roihu_published_fedsnn.sh").read_text(encoding="utf-8"),
+    ):
+        assert "fedsnn_paper_evaluation" in text
+        assert "fedsnn_corrected" not in text
+        assert "runs/published_fedsnn" not in text
 
 
 @pytest.mark.parametrize("name", (*ARRAYS, *WRAPPERS))

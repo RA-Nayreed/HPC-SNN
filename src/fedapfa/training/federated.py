@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import logging
-import math
 import random
 import statistics
 import time
@@ -143,8 +142,12 @@ def train_federated(
     client_ids = sorted(bundle.partition.client_indices)
     schedule = ClientSelectionSchedule(client_ids, bundle.resolved_seed_values["client_selection"])
     start_round = 1
-    best_accuracy = -math.inf
-    best_round = 0
+    checkpoint_selection = config["federated"]["checkpoint_selection"]
+    validation_enabled = bundle.validation_dataset is not None
+    if not validation_enabled and checkpoint_selection != "final_round":
+        raise RuntimeError("an execution without internal validation requires final_round checkpoint selection")
+    best_accuracy: float | None = None
+    best_round: int | None = None
     cumulative_download = 0
     cumulative_upload = 0
     client_records: list[dict] = []
@@ -160,8 +163,10 @@ def train_federated(
             model_initialization_id,
         )
         start_round = checkpoint["next_round"]
-        best_accuracy = float(checkpoint["best_validation_accuracy"])
-        best_round = int(checkpoint["best_validation_round"])
+        stored_best_accuracy = checkpoint.get("best_validation_accuracy")
+        stored_best_round = checkpoint.get("best_validation_round")
+        best_accuracy = None if stored_best_accuracy is None else float(stored_best_accuracy)
+        best_round = None if stored_best_round is None else int(stored_best_round)
         cumulative_download = int(checkpoint["cumulative_download_bytes"])
         cumulative_upload = int(checkpoint["cumulative_upload_bytes"])
         client_records = list(checkpoint["client_records"])
@@ -210,32 +215,38 @@ def train_federated(
 
         synchronize_cuda(device)
         aggregation_started = time.monotonic()
-        weights, aggregated_update_norm, update_cosines = aggregate_client_results(model, local_results)
+        weights, aggregated_update_norm, update_cosines = aggregate_client_results(
+            model,
+            local_results,
+            config["federated"]["aggregation_weighting"],
+        )
         synchronize_cuda(device)
         aggregation_time = time.monotonic() - aggregation_started
         for result, weight, cosine in zip(local_results, weights, update_cosines, strict=True):
             client_records.append(result.record(weight, cosine))
 
-        validation_seed = derive_seed(
-            config["seed"], config["seed_streams"]["validation"], round_number
-        )
-        synchronize_cuda(device)
-        validation_started = time.monotonic()
-        validation = validate_global_model(
-            model,
-            bundle.validation_dataset,
-            device,
-            config["federated"]["local_batch_size"],
-            validation_seed,
-            config["federated"]["data_loader_workers"],
-            config["federated"]["persistent_workers"],
-        )
-        synchronize_cuda(device)
-        validation_time = time.monotonic() - validation_started
-        improved = validation.accuracy > best_accuracy
-        if improved:
-            best_accuracy = validation.accuracy
-            best_round = round_number
+        validation = None
+        validation_time = 0.0
+        improved = False
+        if validation_enabled:
+            validation_seed = derive_seed(config["seed"], config["seed_streams"]["validation"], round_number)
+            synchronize_cuda(device)
+            validation_started = time.monotonic()
+            validation = validate_global_model(
+                model,
+                bundle.validation_dataset,
+                device,
+                config["federated"]["local_batch_size"],
+                validation_seed,
+                config["federated"]["data_loader_workers"],
+                config["federated"]["persistent_workers"],
+            )
+            synchronize_cuda(device)
+            validation_time = time.monotonic() - validation_started
+            improved = best_accuracy is None or validation.accuracy > best_accuracy
+            if improved:
+                best_accuracy = validation.accuracy
+                best_round = round_number
 
         communication = communication_for_clients(payload, len(selected))
         cumulative_download += communication["download_bytes"]
@@ -247,15 +258,18 @@ def train_federated(
         round_result = RoundResult(
             round_number=round_number,
             selected_client_ids=selected,
+            aggregation_weighting=config["federated"]["aggregation_weighting"],
             client_example_counts=[result.example_count for result in local_results],
+            client_training_examples_presented=[result.local_training_examples_presented for result in local_results],
             aggregation_weights=weights,
             total_selected_examples=sum(result.example_count for result in local_results),
-            validation_loss=validation.loss,
-            validation_accuracy=validation.accuracy,
-            validation_macro_f1=validation.macro_f1,
-            validation_per_class_accuracy=validation.per_class_accuracy,
-            validation_confusion_matrix=validation.confusion_matrix,
-            validation_spike_rates=validation.spike_rates,
+            total_training_examples_presented=sum(result.local_training_examples_presented for result in local_results),
+            validation_loss=None if validation is None else validation.loss,
+            validation_accuracy=None if validation is None else validation.accuracy,
+            validation_macro_f1=None if validation is None else validation.macro_f1,
+            validation_per_class_accuracy=None if validation is None else validation.per_class_accuracy,
+            validation_confusion_matrix=None if validation is None else validation.confusion_matrix,
+            validation_spike_rates=None if validation is None else validation.spike_rates,
             global_model_l2_norm=global_model_norm(model),
             aggregated_update_l2_norm=aggregated_update_norm,
             mean_client_update_l2_norm=statistics.mean(update_norms),
@@ -274,12 +288,21 @@ def train_federated(
             cumulative_logical_upload_bytes=cumulative_upload,
             cumulative_logical_communication_bytes=cumulative_download + cumulative_upload,
             peak_cuda_memory_bytes=(
-                max([value for value in [*client_peak_memory, validation.peak_cuda_memory_bytes] if value is not None])
+                max(
+                    [
+                        value
+                        for value in [
+                            *client_peak_memory,
+                            None if validation is None else validation.peak_cuda_memory_bytes,
+                        ]
+                        if value is not None
+                    ]
+                )
                 if device.type == "cuda"
                 else None
             ),
             current_best_validation_round=best_round,
-            selected_checkpoint=improved,
+            selected_checkpoint=(improved if checkpoint_selection == "best_validation" else round_number == rounds),
         )
         round_records.append(round_result.record())
         _write_jsonl(path / "client_metrics.jsonl", client_records)
@@ -303,13 +326,16 @@ def train_federated(
         if improved:
             save_federated_checkpoint(checkpoint_dir / "best.pt", **checkpoint_arguments)
         save_federated_checkpoint(checkpoint_dir / "last.pt", **checkpoint_arguments)
-        logger.info(
-            "round=%d selected=%s validation_accuracy=%.6f best_round=%d",
-            round_number,
-            ",".join(selected),
-            validation.accuracy,
-            best_round,
-        )
+        if validation is None:
+            logger.info("round=%d selected=%s validation=unavailable", round_number, ",".join(selected))
+        else:
+            logger.info(
+                "round=%d selected=%s validation_accuracy=%.6f best_round=%d",
+                round_number,
+                ",".join(selected),
+                validation.accuracy,
+                best_round,
+            )
         if stop_after_round is not None and round_number >= stop_after_round:
             return {
                 "completed": False,
@@ -319,9 +345,14 @@ def train_federated(
 
     if len(round_records) != rounds:
         raise RuntimeError("federated execution ended before all communication rounds")
-    best_checkpoint = checkpoint_dir / "best.pt"
+    if checkpoint_selection == "best_validation" and best_round is None:
+        raise RuntimeError("best_validation selection completed without a validation result")
+    selected_round = best_round if checkpoint_selection == "best_validation" else rounds
+    selected_checkpoint = (
+        checkpoint_dir / "best.pt" if checkpoint_selection == "best_validation" else checkpoint_dir / "last.pt"
+    )
     load_federated_checkpoint(
-        best_checkpoint,
+        selected_checkpoint,
         model,
         config,
         path,
@@ -332,7 +363,8 @@ def train_federated(
     )
     official_path = path / "official_test_metrics.json"
     official_identity = {
-        "selected_round": best_round,
+        "selected_round": selected_round,
+        "checkpoint_selection": checkpoint_selection,
         "split_id": bundle.split_artifact["split_id"],
         "partition_id": bundle.partition.partition_id,
         "model_initialization_id": model_initialization_id,
@@ -374,26 +406,33 @@ def train_federated(
         }
         atomic_write_json(official_path, official_record)
     test_metrics = official_record["metrics"]
-    selected_validation = round_records[best_round - 1]
-    fairness_proxy = fairness_proxy_record(
-        selected_validation["validation_per_class_accuracy"], bundle.partition.artifact
-    )
+    selected_validation_record = round_records[selected_round - 1]
+    selected_validation = None
+    fairness_proxy = None
+    if validation_enabled:
+        selected_validation = {
+            "loss": selected_validation_record["validation_loss"],
+            "accuracy": selected_validation_record["validation_accuracy"],
+            "macro_f1": selected_validation_record["validation_macro_f1"],
+            "per_class_accuracy": selected_validation_record["validation_per_class_accuracy"],
+            "confusion_matrix": selected_validation_record["validation_confusion_matrix"],
+            "spike_rates": selected_validation_record["validation_spike_rates"],
+        }
+        fairness_proxy = fairness_proxy_record(
+            selected_validation_record["validation_per_class_accuracy"], bundle.partition.artifact
+        )
+    training_example_count = len(bundle.split_artifact["training_indices"])
+    validation_example_count = len(bundle.split_artifact["validation_indices"])
     final = {
-        "schema_version": 1,
+        "schema_version": 2,
         "accepted": False,
         "completed": False,
         "completed_rounds": rounds,
         "best_validation_accuracy": best_accuracy,
-        "selected_round": best_round,
+        "selected_round": selected_round,
+        "checkpoint_selection": checkpoint_selection,
         "final_validation_accuracy": round_records[-1]["validation_accuracy"],
-        "selected_validation": {
-            "loss": selected_validation["validation_loss"],
-            "accuracy": selected_validation["validation_accuracy"],
-            "macro_f1": selected_validation["validation_macro_f1"],
-            "per_class_accuracy": selected_validation["validation_per_class_accuracy"],
-            "confusion_matrix": selected_validation["validation_confusion_matrix"],
-            "spike_rates": selected_validation["validation_spike_rates"],
-        },
+        "selected_validation": selected_validation,
         "client_distribution_weighted_validation_accuracy": fairness_proxy,
         "test": test_metrics,
         "model_class": type(model).__name__,
@@ -416,18 +455,45 @@ def train_federated(
             "measured_network_traffic": False,
         },
         "execution_time_seconds": sum(record["total_round_time_seconds"] for record in round_records),
-        "mean_client_update_l2_norm": sum(record["update_l2_norm"] for record in client_records)
-        / len(client_records),
+        "mean_client_update_l2_norm": sum(record["update_l2_norm"] for record in client_records) / len(client_records),
         "mean_client_spike_rates": _mean_client_spike_rates(client_records),
         "mean_client_update_cosine_similarity": statistics.mean(
             record["update_cosine_similarity"] for record in client_records
         ),
         "peak_cuda_memory_bytes": (
-            max(record["peak_cuda_memory_bytes"] for record in round_records)
-            if config["device"] == "cuda"
-            else None
+            max(record["peak_cuda_memory_bytes"] for record in round_records) if config["device"] == "cuda" else None
         ),
         "dataset_identity": bundle.split_artifact.get("dataset_identity"),
+        "data_protocol": {
+            "examples_available_before_validation_separation": training_example_count + validation_example_count,
+            "examples_used_for_client_training": training_example_count,
+            "examples_used_for_validation": validation_example_count,
+            "official_test_examples": int(test_metrics["examples"]),
+            "official_test_access_count": int(official_record["access_count"]),
+            "selected_checkpoint_rule": checkpoint_selection,
+            "internal_validation_available": validation_enabled,
+            "official_test_monitored_during_training": False,
+            "official_test_paper_collection_name": ("validation" if config["dataset"]["name"] == "cifar10" else None),
+            "released_source_monitors_official_test_during_training": (config["dataset"]["name"] == "cifar10"),
+            "all_50000_standard_training_examples_used": (
+                config["dataset"]["name"] == "cifar10" and training_example_count == 50000
+            ),
+        },
+        "selected_checkpoint_artifact": (
+            "checkpoints/best.pt" if checkpoint_selection == "best_validation" else "checkpoints/last.pt"
+        ),
+        "aggregation_weighting": config["federated"]["aggregation_weighting"],
+        "local_epochs": config["federated"]["local_epochs"],
+        "total_clients": config["federated"]["clients"],
+        "participating_clients": config["federated"]["clients_per_round"],
+        "momentum": config["federated"].get("momentum"),
+        "weight_decay": config["federated"]["weight_decay"],
+        "distribution": (
+            "iid" if config["federated"]["partition"]["method"] == "fedsnn_random_iid" else "label_dirichlet_non_iid"
+        ),
+        "partition_alpha": config["federated"]["partition"].get("alpha"),
+        "timesteps": config["model"].get("timesteps"),
+        "input_encoding": config["model"].get("input_encoding"),
         "protocol_assumptions": config.get("protocol_assumptions", []),
         "termination": {"reason": "communication_rounds_completed", "configured_rounds": rounds},
     }

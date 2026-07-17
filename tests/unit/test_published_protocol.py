@@ -19,7 +19,7 @@ from fedapfa.models.svgg9_bntt import (
 
 HETEROGENEITY_MANIFEST = "experiments/heterogeneity_evaluation/manifest.yaml"
 PUBLISHED_MANIFEST = "experiments/published_fedsnn/manifest.yaml"
-PUBLISHED_CONFIG = "experiments/published_fedsnn/cifar10/svgg9_bntt_dirichlet_alpha_0_5.yaml"
+PUBLISHED_CONFIG = "experiments/published_fedsnn/cifar10/paper_reported_iid_evaluation.yaml"
 
 
 def test_scientific_manifests_have_exact_task_counts_and_seeds():
@@ -28,22 +28,74 @@ def test_scientific_manifests_have_exact_task_counts_and_seeds():
     published = load_published_fedsnn_manifest(PUBLISHED_MANIFEST)
     assert len(heterogeneity) == 9
     assert len(context) == 3
-    assert len(published) == 3
+    assert len(published) == 6
     assert sorted({value.seed for value in heterogeneity}) == [7, 17, 27]
     assert [value.seed for value in context] == [7, 17, 27]
-    assert [value.seed for value in published] == [7, 17, 27]
+    assert [value.seed for value in published] == [7, 17, 27, 7, 17, 27]
+    assert {value.protocol for value in published} == {"paper_reported_evaluation"}
+    assert {value.experiment for value in published} == {
+        "cifar10_fedsnn_paper_reported_iid_evaluation",
+        "cifar10_fedsnn_paper_reported_noniid_evaluation",
+    }
+    assert "cifar10_svgg9_bntt_dirichlet_alpha_0_5" not in {value.experiment for value in published}
+
+
+def test_table_i_treatments_differ_only_in_distribution_identity_and_reference():
+    tasks = load_published_fedsnn_manifest(PUBLISHED_MANIFEST)
+    iid, noniid = tasks[0].config, tasks[3].config
+
+    def common_scientific_settings(config):
+        value = copy.deepcopy(config)
+        value.pop("name")
+        value.pop("metadata")
+        value["federated"].pop("partition")
+        value["acceptance"].pop("descriptive_reference_accuracy")
+        return value
+
+    assert common_scientific_settings(iid) == common_scientific_settings(noniid)
+    for config in (iid, noniid):
+        federation = config["federated"]
+        assert config["dataset"]["validation_fraction"] == 0.0
+        assert federation["local_epochs"] == 5
+        assert federation["momentum"] == 0.95
+        assert federation["weight_decay"] == 0.0001
+        assert federation["checkpoint_selection"] == "final_round"
+        assert federation["learning_rate_reduction_rounds"] == [40, 60, 80]
+        assert config["output_root"] == "runs/fedsnn_paper_evaluation"
+    assert iid["federated"]["partition"] == {
+        "method": "fedsnn_random_iid",
+        "alpha": None,
+        "minimum_examples_per_client": 10,
+        "maximum_attempts": 1000,
+    }
+    assert noniid["federated"]["partition"]["method"] == "fedsnn_balanced_label_dirichlet"
+    assert noniid["federated"]["partition"]["alpha"] == 0.5
+    assert iid["acceptance"]["descriptive_reference_accuracy"] == 0.7644
+    assert noniid["acceptance"]["descriptive_reference_accuracy"] == 0.7394
 
 
 @pytest.mark.parametrize(
     ("change", "message"),
     [
         (lambda value: value["federated"]["partition"].update(method="unknown"), "unknown partition"),
-        (lambda value: value["federated"]["partition"].update(alpha=0.0), "finite and positive"),
+        (lambda value: value["federated"]["partition"].update(alpha=0.0), "cannot set alpha"),
+        (
+            lambda value: value["federated"]["partition"].update(method="stratified_iid"),
+            "incompatible distribution",
+        ),
         (lambda value: value["federated"].update(clients_per_round=11), "cannot exceed"),
         (lambda value: value["federated"].update(participation_fraction=0.3), "inconsistent"),
         (lambda value: value["federated"].update(optimizer="adam", momentum=None), "requires SGD"),
         (lambda value: value.update(device="cpu"), "require CUDA"),
         (lambda value: value["model"].pop("timesteps"), "timesteps"),
+        (lambda value: value["model"].update(input_encoding="unknown"), "signed_poisson"),
+        (lambda value: value["model"].update(readout="sum"), "temporal_mean"),
+        (lambda value: value["model"].update(weight_initialization="default"), "xavier"),
+        (lambda value: value["dataset"]["transforms"].update(normalization="unknown"), "signed"),
+        (lambda value: value["federated"].update(aggregation_weighting="unknown"), "aggregation"),
+        (lambda value: value["federated"].update(local_epochs=2), "epoch"),
+        (lambda value: value["federated"].update(weight_decay=0.0), "weight decay"),
+        (lambda value: value["dataset"].update(validation_fraction=0.1), "validation_fraction"),
         (lambda value: value["provenance"].update(require_git_commit=False), "provenance"),
         (lambda value: value["subset"].update(train_examples=10), "caps"),
     ],
@@ -57,9 +109,7 @@ def test_published_configuration_rejections(change, message):
 
 
 def test_iid_alpha_and_dataset_model_mismatches_are_rejected():
-    iid = load_federated_config(
-        "experiments/heterogeneity_evaluation/shd/lif_iid_participation_0_50.yaml"
-    )
+    iid = load_federated_config("experiments/heterogeneity_evaluation/shd/lif_iid_participation_0_50.yaml")
     iid["federated"]["partition"]["alpha"] = 1.0
     with pytest.raises(ConfigurationError, match="cannot set alpha"):
         validate_federated_config(iid)
@@ -67,6 +117,10 @@ def test_iid_alpha_and_dataset_model_mismatches_are_rejected():
     published["dataset"]["name"] = "shd"
     with pytest.raises(ConfigurationError, match="SHD cannot be paired"):
         validate_federated_config(published)
+    paper = load_federated_config("experiments/published_fedsnn/cifar10/paper_reported_noniid_evaluation.yaml")
+    paper["federated"]["partition"]["alpha"] = 0.4
+    with pytest.raises(ConfigurationError, match="incompatible distribution"):
+        validate_federated_config(paper)
 
 
 def _model_config():
@@ -81,14 +135,18 @@ def _model_config():
             "threshold": 1.0,
             "surrogate_scale": 0.3,
             "bntt_momentum": 0.1,
-            "bntt_epsilon": 1e-5,
+            "bntt_epsilon": 1e-4,
+            "input_encoding": "signed_poisson",
+            "poisson_rescale_factor": 2.0,
+            "readout": "temporal_mean",
+            "weight_initialization": "xavier_uniform_gain_2",
         },
     }
 
 
 def test_svgg9_bntt_shape_independent_temporal_state_and_finite_gradients():
     model = SVGG9BNTT(_model_config()).train()
-    images = torch.rand(2, 3, 8, 8)
+    images = torch.rand(2, 3, 8, 8).mul(2).sub(1)
     logits, rates = model(images, generator=torch.Generator().manual_seed(7))
     assert logits.shape == (2, 4)
     assert set(rates) == {"conv1", "conv2", "conv3", "conv4", "conv5", "conv6", "conv7", "linear1"}
@@ -104,10 +162,12 @@ def test_svgg9_bntt_shape_independent_temporal_state_and_finite_gradients():
 
 
 def test_poisson_encoding_is_deterministic_under_fixed_seed():
-    images = torch.tensor([[[[0.0, 0.25], [0.75, 1.0]]]])
+    images = torch.tensor([[[[0.0, 0.25], [-0.75, 1.0]]]])
     first = poisson_rate_encode(images, 6, torch.Generator().manual_seed(19))
     second = poisson_rate_encode(images, 6, torch.Generator().manual_seed(19))
     third = poisson_rate_encode(images, 6, torch.Generator().manual_seed(29))
     assert torch.equal(first, second)
     assert not torch.equal(first, third)
-    assert torch.all(first[..., 0, 0] == 0) and torch.all(first[..., 1, 1] == 1)
+    assert torch.all(first[..., 0, 0] == 0)
+    assert set(first[..., 0, 1].unique().tolist()) <= {0.0, 1.0}
+    assert set(first[..., 1, 0].unique().tolist()) <= {-1.0, 0.0}

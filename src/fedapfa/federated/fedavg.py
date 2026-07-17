@@ -14,7 +14,7 @@ from .round_state import AggregationInput, ClientResult
 
 
 def aggregate_client_results(
-    model: nn.Module, results: list[ClientResult]
+    model: nn.Module, results: list[ClientResult], weighting_policy: str = "example_count"
 ) -> tuple[list[float], float, list[float]]:
     """Aggregate client states and calculate alignment while updates are resident."""
 
@@ -27,11 +27,10 @@ def aggregate_client_results(
                 state_dict=result.state_dict,
             )
             for result in results
-        ]
+        ],
+        weighting_policy,
     )
-    cosines = [
-        state_difference_cosine_similarity(result.state_dict, before, aggregated) for result in results
-    ]
+    cosines = [state_difference_cosine_similarity(result.state_dict, before, aggregated) for result in results]
     update_norm = state_difference_l2_norm(aggregated, before)
     model.load_state_dict(aggregated, strict=True)
     return weights, update_norm, cosines

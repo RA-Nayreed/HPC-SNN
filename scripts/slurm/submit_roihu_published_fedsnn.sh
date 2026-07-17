@@ -29,14 +29,14 @@ venv="${FEDAPFA_VENV:-/projappl/${CSC_PROJECT}/${USER}/hpc-snn-venv}"
 source "${venv}/bin/activate"
 python3 -m fedapfa.cli.scientific_manifest validate --manifest "${manifest}"
 task_count="$(python3 -m fedapfa.cli.scientific_manifest count --manifest "${manifest}")"
-[[ "${task_count}" == "3" ]] || { echo "published protocol manifest must contain 3 tasks" >&2; exit 2; }
-mkdir -p "${work_dir}/runs/published_fedsnn" "${work_dir}/results/published_fedsnn" \
-    "${work_dir}/slurm-logs/published_fedsnn" "${work_dir}/telemetry/published_fedsnn"
+[[ "${task_count}" == "6" ]] || { echo "corrected Fed-SNN manifest must contain 6 tasks" >&2; exit 2; }
+mkdir -p "${work_dir}/runs/fedsnn_paper_evaluation" "${work_dir}/results/fedsnn_paper_evaluation" \
+    "${work_dir}/slurm-logs/fedsnn_paper_evaluation" "${work_dir}/telemetry/fedsnn_paper_evaluation"
 job_id="$(sbatch --parsable --account="${CSC_PROJECT}" --chdir="${repo_root}" \
-    --array="0-2%${max_parallel}" \
-    --output="${work_dir}/slurm-logs/published_fedsnn/%A_%a.out" \
-    --error="${work_dir}/slurm-logs/published_fedsnn/%A_%a.err" \
+    --array="0-5%${max_parallel}" \
+    --output="${work_dir}/slurm-logs/fedsnn_paper_evaluation/%A_%a.out" \
+    --error="${work_dir}/slurm-logs/fedsnn_paper_evaluation/%A_%a.err" \
     --export="ALL,WORK=${work_dir},REPO_ROOT=${repo_root},MANIFEST=${manifest}" \
     "${script_dir}/published_fedsnn_array.sbatch")"
 job_id="${job_id%%;*}"
-echo "Published Fed-SNN job ID: ${job_id}"
+echo "Corrected Fed-SNN job ID: ${job_id}"

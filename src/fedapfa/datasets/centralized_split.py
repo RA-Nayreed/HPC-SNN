@@ -7,8 +7,10 @@ def stratified_split(
     labels: np.ndarray, validation_fraction: float = 0.1, seed: int = 7
 ) -> tuple[np.ndarray, np.ndarray]:
     labels = np.asarray(labels, dtype=np.int64)
-    if labels.ndim != 1 or not 0 < validation_fraction < 1:
-        raise ValueError("labels must be one-dimensional and validation_fraction in (0, 1)")
+    if labels.ndim != 1 or not 0 <= validation_fraction < 1:
+        raise ValueError("labels must be one-dimensional and validation_fraction in [0, 1)")
+    if validation_fraction == 0:
+        return np.arange(len(labels), dtype=np.int64), np.empty(0, dtype=np.int64)
     rng = np.random.default_rng(seed)
     train, validation = [], []
     for label in np.unique(labels):

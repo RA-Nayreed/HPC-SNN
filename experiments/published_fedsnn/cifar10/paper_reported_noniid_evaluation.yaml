@@ -1,0 +1,42 @@
+include:
+  - ../../../configs/base/centralized.yaml
+  - ../../../configs/datasets/cifar10_fedsnn_source.yaml
+  - ../../../configs/models/svgg9_bntt_fedsnn_source.yaml
+  - ../../../configs/federated/fedsnn_source_compatible.yaml
+name: cifar10_fedsnn_paper_reported_noniid_evaluation
+mode: scientific_evaluation
+execution: federated
+protocol: paper_reported_evaluation
+device: cuda
+output_root: runs/fedsnn_paper_evaluation
+pairing_group: cifar10_fedsnn_table_i_snn_10_2
+dataset:
+  validation_fraction: 0.0
+federated:
+  local_epochs: 5
+  partition:
+    method: fedsnn_balanced_label_dirichlet
+    alpha: 0.5
+protocol_assumptions:
+  - All 50,000 standard training examples are partitioned among clients with no internal validation collection.
+  - The final-round model is evaluated once on the official test collection, which the paper calls validation.
+  - The released source monitors the official test collection during training; this project does not.
+  - The project trains selected clients only, whereas the released program computes all client updates before selecting uploads.
+  - Uniform aggregation follows released Fed.py and conflicts with the paper's example-count-weighted equation.
+setting_sources:
+  paper:
+    - Table I reports the IID and alpha-0.5 non-IID SNN 10/2 rows after 100 rounds and three repetitions.
+    - Five local epochs, batch size 32, SGD learning rate 0.1, momentum 0.95, and reductions after rounds 40, 60, and 80 are paper-reported settings.
+  released_source:
+    - Signed normalization and Poisson encoding, 20 timesteps, temporal-mean readout, Xavier gain-2 initialization, BNTT epsilon 0.0001, dropped local remainders, and uniform aggregation are source-derived.
+    - Weight decay 0.0001 is inherited from the pinned source default and is not explicit in the paper.
+  interpretations:
+    - Final-round selection, one official-test access after round 100, isolated random generators, and training selected clients only are project protocol choices.
+metadata:
+  experiment: cifar10_fedsnn_paper_reported_noniid_evaluation
+  purpose: paper_reported_table_i_snn_10_2_evaluation
+acceptance:
+  expected_model_class: SVGG9BNTT
+  reference_test_accuracy: null
+  descriptive_reference_accuracy: 0.7394
+  absolute_tolerance: null

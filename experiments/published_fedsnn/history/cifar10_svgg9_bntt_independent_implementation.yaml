@@ -19,7 +19,7 @@ protocol_assumptions:
   - Weight decay is zero and gradient clipping is disabled.
 metadata:
   experiment: cifar10_svgg9_bntt_dirichlet_alpha_0_5
-  purpose: independent_published_protocol
+  purpose: unsuccessful_independent_implementation
 acceptance:
   expected_model_class: SVGG9BNTT
   reference_test_accuracy: null

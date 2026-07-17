@@ -19,6 +19,9 @@ class ClientResult:
     round_number: int
     client_id: str
     example_count: int
+    client_population_examples: int
+    presented_examples_per_local_epoch: int
+    local_training_examples_presented: int
     batch_count: int
     starting_training_loss: float
     starting_training_accuracy: float
@@ -66,15 +69,18 @@ class EvaluationResult:
 class RoundResult:
     round_number: int
     selected_client_ids: list[str]
+    aggregation_weighting: str
     client_example_counts: list[int]
+    client_training_examples_presented: list[int]
     aggregation_weights: list[float]
     total_selected_examples: int
-    validation_loss: float
-    validation_accuracy: float
-    validation_macro_f1: float
-    validation_per_class_accuracy: list[float]
-    validation_confusion_matrix: list[list[int]]
-    validation_spike_rates: dict[str, float]
+    total_training_examples_presented: int
+    validation_loss: float | None
+    validation_accuracy: float | None
+    validation_macro_f1: float | None
+    validation_per_class_accuracy: list[float] | None
+    validation_confusion_matrix: list[list[int]] | None
+    validation_spike_rates: dict[str, float] | None
     global_model_l2_norm: float
     aggregated_update_l2_norm: float
     mean_client_update_l2_norm: float
@@ -93,7 +99,7 @@ class RoundResult:
     cumulative_logical_upload_bytes: int
     cumulative_logical_communication_bytes: int
     peak_cuda_memory_bytes: int | None
-    current_best_validation_round: int
+    current_best_validation_round: int | None
     selected_checkpoint: bool
 
     def record(self) -> dict:

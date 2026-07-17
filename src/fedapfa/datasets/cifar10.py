@@ -13,6 +13,10 @@ from torch.utils.data import Dataset
 
 from fedapfa.datasets.centralized_split import stratified_split
 from fedapfa.datasets.dirichlet_partition import DirichletPartition, label_dirichlet_partition
+from fedapfa.datasets.fedsnn_partition import (
+    fedsnn_balanced_label_dirichlet_partition,
+    fedsnn_random_iid_partition,
+)
 from fedapfa.federated.randomness import resolved_seeds
 from fedapfa.utilities.serialization import sha256_json
 
@@ -23,6 +27,31 @@ class CIFAR10DependencyError(RuntimeError):
 
 class CIFAR10AccessError(RuntimeError):
     """Raised when CIFAR-10 files or split access violate the protocol."""
+
+
+def normalize_cifar10_tensor(tensor: torch.Tensor, normalization: str) -> torch.Tensor:
+    """Apply one explicitly selected CIFAR-10 value representation."""
+
+    if not tensor.is_floating_point():
+        raise TypeError("CIFAR-10 normalization requires a floating tensor")
+    if not bool(torch.isfinite(tensor).all()):
+        raise ValueError("CIFAR-10 input contains NaN or infinity")
+    tolerance = 8 * torch.finfo(tensor.dtype).eps
+    if bool(torch.any(tensor < -tolerance)) or bool(torch.any(tensor > 1 + tolerance)):
+        raise ValueError("CIFAR-10 input before normalization must be in [0, 1]")
+    if normalization == "scale_0_1":
+        result = tensor
+        lower, upper = 0.0, 1.0
+    elif normalization == "signed_minus_one_one":
+        result = tensor.mul(2.0).sub(1.0)
+        lower, upper = -1.0, 1.0
+    else:
+        raise ValueError(f"unsupported CIFAR-10 normalization: {normalization}")
+    if not bool(torch.isfinite(result).all()):
+        raise ValueError("normalized CIFAR-10 tensor contains NaN or infinity")
+    if bool(torch.any(result < lower - tolerance)) or bool(torch.any(result > upper + tolerance)):
+        raise ValueError(f"normalized CIFAR-10 tensor must remain in [{lower:g}, {upper:g}]")
+    return result
 
 
 def _torchvision():
@@ -93,9 +122,7 @@ class CIFAR10TrainingData(Dataset):
         self.data = np.concatenate(data_parts, axis=0)
         self.targets = targets
         if self.data.shape != (50000, 3, 32, 32) or len(self.targets) != 50000:
-            raise CIFAR10AccessError(
-                f"expected 50000 CIFAR-10 training examples, found {len(self.targets)}"
-            )
+            raise CIFAR10AccessError(f"expected 50000 CIFAR-10 training examples, found {len(self.targets)}")
 
     def __len__(self) -> int:
         return len(self.targets)
@@ -137,8 +164,7 @@ class CIFAR10IndexedDataset(Dataset):
         if self.augment and augmentation["horizontal_flip"]:
             if float(torch.rand(())) < float(augmentation["horizontal_flip_probability"]):
                 tensor = functional.hflip(tensor)
-        if self.transform_config["normalization"] != "scale_0_1":
-            raise ValueError("unsupported CIFAR-10 normalization")
+        tensor = normalize_cifar10_tensor(tensor, self.transform_config["normalization"])
         return tensor, int(label)
 
 
@@ -149,7 +175,7 @@ class FederatedCIFAR10Bundle:
     labels: np.ndarray
     train_indices: np.ndarray
     validation_indices: np.ndarray
-    validation_dataset: CIFAR10IndexedDataset
+    validation_dataset: CIFAR10IndexedDataset | None
     partition: DirichletPartition
     split_artifact: dict
     resolved_seed_values: dict[str, int]
@@ -175,8 +201,7 @@ class FederatedCIFAR10Bundle:
             base = datasets.CIFAR10(root=str(self.root), train=False, download=False, transform=None)
         except RuntimeError as error:
             raise CIFAR10AccessError(
-                "CIFAR-10 test files are unavailable; run "
-                f"fedapfa-download-data cifar10 --root {self.root.parent}"
+                f"CIFAR-10 test files are unavailable; run fedapfa-download-data cifar10 --root {self.root.parent}"
             ) from error
         test_batch = self.root / "cifar-10-batches-py" / "test_batch"
         test_file_identity = _file_identity(test_batch)
@@ -217,19 +242,35 @@ def prepare_federated_cifar10(config: dict) -> FederatedCIFAR10Bundle:
     split_artifact = dict(split_core)
     split_artifact["split_id"] = sha256_json(split_core)
     partition_config = config["federated"]["partition"]
-    partition = label_dirichlet_partition(
-        labels=labels,
-        eligible_indices=train_indices,
-        clients=config["federated"]["clients"],
-        alpha=partition_config["alpha"],
-        minimum_size=partition_config["minimum_examples_per_client"],
-        seed=seeds["partition"],
-        maximum_attempts=partition_config["maximum_attempts"],
-        validation_split_id=split_artifact["split_id"],
-        dataset_identity=dataset_identity,
-    )
-    validation = CIFAR10IndexedDataset(
-        base, validation_indices, config["dataset"]["transforms"], augment=False
+    common_partition = {
+        "labels": labels,
+        "eligible_indices": train_indices,
+        "clients": config["federated"]["clients"],
+        "minimum_size": partition_config["minimum_examples_per_client"],
+        "seed": seeds["partition"],
+        "validation_split_id": split_artifact["split_id"],
+        "dataset_identity": dataset_identity,
+    }
+    if partition_config["method"] == "fedsnn_balanced_label_dirichlet":
+        partition = fedsnn_balanced_label_dirichlet_partition(
+            **common_partition,
+            alpha=partition_config["alpha"],
+            maximum_attempts=partition_config["maximum_attempts"],
+        )
+    elif partition_config["method"] == "fedsnn_random_iid":
+        partition = fedsnn_random_iid_partition(**common_partition)
+    elif partition_config["method"] == "label_dirichlet":
+        partition = label_dirichlet_partition(
+            **common_partition,
+            alpha=partition_config["alpha"],
+            maximum_attempts=partition_config["maximum_attempts"],
+        )
+    else:
+        raise ValueError(f"unsupported CIFAR-10 partition method: {partition_config['method']}")
+    validation = (
+        CIFAR10IndexedDataset(base, validation_indices, config["dataset"]["transforms"], augment=False)
+        if len(validation_indices)
+        else None
     )
     return FederatedCIFAR10Bundle(
         root=root,

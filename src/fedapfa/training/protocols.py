@@ -7,10 +7,16 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import h5py
+import numpy as np
 from torch.utils.data import Dataset
 
 from fedapfa.configuration.validation import resolve_dataset_paths
 from fedapfa.datasets.centralized_split import select_subset, stratified_split
+from fedapfa.datasets.cifar10 import (
+    CIFAR10IndexedDataset,
+    CIFAR10TrainingData,
+    _torchvision,
+)
 from fedapfa.datasets.shd import EventAudioDataset
 
 
@@ -39,7 +45,61 @@ def _dataset(path, indices, config, validate=True):
     )
 
 
+def _prepare_cifar10(config) -> DatasetBundle:
+    root = Path(config["dataset"]["root"])
+    base = CIFAR10TrainingData(root)
+    labels = np.asarray(base.targets, dtype=np.int64)
+    train_indices, validation_indices = stratified_split(
+        labels,
+        config["dataset"]["validation_fraction"],
+        config["seed"],
+    )
+    transforms = config["dataset"]["transforms"]
+    train = CIFAR10IndexedDataset(base, train_indices, transforms, augment=True)
+    validation = CIFAR10IndexedDataset(base, validation_indices, transforms, augment=False)
+
+    def create_test_dataset():
+        datasets, _, _ = _torchvision()
+        test_base = datasets.CIFAR10(root=str(root), train=False, download=False, transform=None)
+        return CIFAR10IndexedDataset(
+            test_base,
+            np.arange(len(test_base), dtype=np.int64),
+            transforms,
+            augment=False,
+        )
+
+    return DatasetBundle(
+        train,
+        validation,
+        create_test_dataset,
+        {
+            "train": [int(value) for value in train_indices],
+            "validation": [int(value) for value in validation_indices],
+        },
+        {
+            "protocol": config["protocol"],
+            "selection_split": "derived_train_validation",
+            "official_test_monitored_during_training": False,
+            "official_test_accessed": False,
+            "official_test_evaluated_after_model_selection": False,
+            "official_test_role": "final_test_only",
+            "official_test_examples": None,
+            "scientific_result": True,
+            "metric_label": "independent_evaluation",
+            "source_train_examples": len(labels),
+            "train_examples": len(train),
+            "validation_examples": len(validation),
+            "complete_training_data_used": len(train) + len(validation) == 50000,
+            "all_50000_standard_training_examples_used_for_fitting": len(train) == 50000,
+            "complete_dataset_used": False,
+            "selected_checkpoint_rule": config["training"]["checkpoint_selection"],
+        },
+    )
+
+
 def prepare_datasets(config) -> DatasetBundle:
+    if config["dataset"]["name"] == "cifar10":
+        return _prepare_cifar10(config)
     paths = resolve_dataset_paths(config)
     dataset = config["dataset"]
     subset = config["subset"]

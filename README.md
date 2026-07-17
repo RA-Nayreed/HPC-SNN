@@ -96,3 +96,47 @@ FedAvg uses sample-count weighting, `w_next = sum(n_k * w_k) / sum(n_k)`. Each s
 Within this protocol, selecting ten rather than five clients increased mean official-test accuracy by 2.87102 percentage points and used exactly twice the logical communication. Both federated means remained below the centralized SHD LIF independent-evaluation mean of 76.3693%, by 6.4046 and 9.2756 percentage points respectively. These are descriptive three-seed comparisons, not significance or causality claims.
 
 All six executions passed completion checks. Their scientific status is `not_claimed` because no verified published FedAvg target is configured; this is expected and is not an execution failure or a reproduction claim. Federated and centralized measurements remain visibly separate even where their independent-evaluation rules permit contextual comparison.
+
+## Corrected CIFAR-10 Fed-SNN protocols
+
+The active Fed-SNN manifest represents the two CIFAR-10 SNN 10/2 rows in Table I: an IID evaluation with descriptive reference 76.44% and a non-IID alpha-0.5 evaluation with descriptive reference 73.94%. Distribution is the only intended treatment difference. Both use all 50,000 standard training examples, five local epochs, momentum 0.95, source-default weight decay `1e-4`, and final-round selection without internal validation or official-test monitoring. Seeds 7, 17, and 27 produce exactly six tasks.
+
+Both treatments use signed `[-1,1]` input, signed Poisson spikes, 20-timestep S-VGG9 BNTT with temporal-mean readout, Xavier gain-2 initialization, BNTT epsilon `1e-4`, dropped local remainders, and uniform selected-client aggregation. The reference values are descriptive, have no acceptance tolerance, and cannot trigger a reproduction pass. Corrected accuracy values will not be published here until compatible executions exist. The earlier 18.23–26.79% executions are retained as a computationally complete but scientifically incompatible independent implementation and are absent from the active manifest.
+
+Validate the two federated configurations, centralized verification, and manifest:
+
+~~~bash
+fedapfa-validate-config experiments/published_fedsnn/cifar10/paper_reported_iid_evaluation.yaml
+fedapfa-validate-config experiments/published_fedsnn/cifar10/paper_reported_noniid_evaluation.yaml
+fedapfa-validate-config experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml
+python3 -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/published_fedsnn/manifest.yaml
+~~~
+
+Submit the six corrected federated tasks on Roihu:
+
+~~~bash
+bash scripts/slurm/submit_roihu_published_fedsnn.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
+  --max-parallel 1
+~~~
+
+Run the centralized learning verification inside a one-GPU Roihu allocation:
+
+~~~bash
+python3 -m fedapfa.cli.train_centralized \
+  experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml \
+  --data-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/data/cifar10" \
+  --output-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/fedsnn_centralized_verification" \
+  --device cuda --resume-auto
+~~~
+
+Monitor and summarize with:
+
+~~~bash
+squeue --job <JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+fedapfa-summarize-published-fedsnn \
+  --manifest experiments/published_fedsnn/manifest.yaml \
+  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/fedsnn_paper_evaluation" \
+  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/fedsnn_paper_evaluation"
+~~~

@@ -76,7 +76,15 @@ def _batch_kind(dataset) -> str:
     return "event_sequence" if sample[0].ndim == 2 else "image"
 
 
-def _loader(dataset, batch_size: int, shuffle: bool, seed: int, workers: int, persistent_workers: bool):
+def _loader(
+    dataset,
+    batch_size: int,
+    shuffle: bool,
+    seed: int,
+    workers: int,
+    persistent_workers: bool,
+    drop_last: bool = False,
+):
     collate = collate_event_sequences if _batch_kind(dataset) == "event_sequence" else default_collate
     return DataLoader(
         dataset,
@@ -88,6 +96,7 @@ def _loader(dataset, batch_size: int, shuffle: bool, seed: int, workers: int, pe
         collate_fn=collate,
         worker_init_fn=seed_worker,
         generator=torch.Generator().manual_seed(seed),
+        drop_last=drop_last,
     )
 
 
@@ -200,6 +209,13 @@ def train_client(
         training_seed,
         federation["data_loader_workers"],
         federation["persistent_workers"],
+        federation["drop_last_local_batch"],
+    )
+    client_population_examples = len(dataset)
+    presented_examples_per_local_epoch = (
+        (client_population_examples // federation["local_batch_size"]) * federation["local_batch_size"]
+        if federation["drop_last_local_batch"]
+        else client_population_examples
     )
     optimizer = make_federated_optimizer(local_model.parameters(), federation, round_number)
     criterion = nn.CrossEntropyLoss()
@@ -296,7 +312,10 @@ def train_client(
     result = ClientResult(
         round_number=round_number,
         client_id=client_id,
-        example_count=len(dataset),
+        example_count=client_population_examples,
+        client_population_examples=client_population_examples,
+        presented_examples_per_local_epoch=presented_examples_per_local_epoch,
+        local_training_examples_presented=(presented_examples_per_local_epoch * federation["local_epochs"]),
         batch_count=batch_count,
         starting_training_loss=first_loss,
         starting_training_accuracy=float(first_accuracy),
