@@ -52,8 +52,8 @@ def reset_snn_state(model: nn.Module) -> None:
             reset()
 
 
-def _move(batch, device: torch.device) -> ModelBatch:
-    non_blocking = device.type == "cuda"
+def _move(batch, device: torch.device, non_blocking: bool | None = None) -> ModelBatch:
+    non_blocking = device.type == "cuda" if non_blocking is None else non_blocking and device.type == "cuda"
     if isinstance(batch, EventBatch):
         moved = EventBatch(*(value.to(device, non_blocking=non_blocking) for value in batch))
         return ModelBatch(moved.inputs, moved.labels, moved.lengths, moved.valid_mask)
@@ -84,19 +84,25 @@ def _loader(
     workers: int,
     persistent_workers: bool,
     drop_last: bool = False,
+    pin_memory: bool = False,
+    prefetch_factor: int | None = None,
 ):
     collate = collate_event_sequences if _batch_kind(dataset) == "event_sequence" else default_collate
+    options = {}
+    if workers > 0 and prefetch_factor is not None:
+        options["prefetch_factor"] = prefetch_factor
     return DataLoader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
         num_workers=workers,
         persistent_workers=persistent_workers and workers > 0,
-        pin_memory=False,
+        pin_memory=pin_memory,
         collate_fn=collate,
         worker_init_fn=seed_worker,
         generator=torch.Generator().manual_seed(seed),
         drop_last=drop_last,
+        **options,
     )
 
 
@@ -210,6 +216,8 @@ def train_client(
         federation["data_loader_workers"],
         federation["persistent_workers"],
         federation["drop_last_local_batch"],
+        federation.get("pin_memory", False),
+        federation.get("prefetch_factor"),
     )
     client_population_examples = len(dataset)
     presented_examples_per_local_epoch = (
@@ -219,13 +227,22 @@ def train_client(
     )
     optimizer = make_federated_optimizer(local_model.parameters(), federation, round_number)
     criterion = nn.CrossEntropyLoss()
-    saved_rng = global_rng_state()
+    distributed_execution = "parallel_execution" in config
+    distributed_cuda = device.type == "cuda" and distributed_execution
+    saved_rng = global_rng_state(device if distributed_cuda else None)
     random.seed(training_seed)
     np.random.seed(training_seed % (2**32))
-    torch.manual_seed(training_seed)
+    if distributed_execution:
+        torch.set_rng_state(torch.Generator().manual_seed(training_seed).get_state())
+    else:
+        torch.manual_seed(training_seed)
     peak_memory_values: list[int] = []
+    peak_reserved_values: list[int] = []
     if device.type == "cuda":
-        torch.cuda.manual_seed_all(training_seed)
+        if distributed_cuda:
+            torch.cuda.manual_seed(training_seed)
+        else:
+            torch.cuda.manual_seed_all(training_seed)
         torch.cuda.reset_peak_memory_stats(device)
     extended = bool(federation.get("record_extended_diagnostics", False))
     first_loss = first_accuracy = None
@@ -254,23 +271,36 @@ def train_client(
         poisson_generator = _generator(device, training_seed)
         synchronize_cuda(device)
         started = time.monotonic()
+        data_wait_time = 0.0
         for _ in range(federation["local_epochs"]):
-            for batch in loader:
+            iterator = iter(loader)
+            while True:
+                data_wait_started = time.monotonic()
+                with torch.profiler.record_function("client_data_loader_wait"):
+                    try:
+                        batch = next(iterator)
+                    except StopIteration:
+                        break
+                data_wait_time += time.monotonic() - data_wait_started
                 reset_snn_state(local_model)
-                moved = _move(batch, device)
+                with torch.profiler.record_function("client_cpu_to_device"):
+                    moved = _move(batch, device, federation.get("non_blocking_transfer", True))
                 optimizer.zero_grad(set_to_none=True)
-                logits, rates = _forward(local_model, moved, poisson_generator)
-                loss = criterion(logits, moved.labels)
+                with torch.profiler.record_function("client_forward"):
+                    logits, rates = _forward(local_model, moved, poisson_generator)
+                    loss = criterion(logits, moved.labels)
                 if not torch.isfinite(loss):
                     raise FloatingPointError("client loss contains NaN or infinity")
-                loss.backward()
+                with torch.profiler.record_function("client_backward"):
+                    loss.backward()
                 for parameter in local_model.parameters():
                     if parameter.grad is not None and not torch.isfinite(parameter.grad).all():
                         raise FloatingPointError("client gradient contains NaN or infinity")
                 gradient_clip = federation.get("gradient_clip")
                 if gradient_clip is not None:
                     torch.nn.utils.clip_grad_norm_(local_model.parameters(), gradient_clip)
-                optimizer.step()
+                with torch.profiler.record_function("client_optimizer_step"):
+                    optimizer.step()
                 if any(not torch.isfinite(parameter).all() for parameter in local_model.parameters()):
                     raise FloatingPointError("client model contains NaN or infinity")
                 loss_value = float(loss.detach())
@@ -287,6 +317,7 @@ def train_client(
         elapsed = time.monotonic() - started
         if device.type == "cuda":
             peak_memory_values.append(torch.cuda.max_memory_allocated(device))
+            peak_reserved_values.append(torch.cuda.max_memory_reserved(device))
         if extended:
             final_evaluation = evaluate_model(
                 local_model,
@@ -303,8 +334,9 @@ def train_client(
                 peak_memory_values.append(final_evaluation.peak_cuda_memory_bytes)
         local_state = clone_state_dict(local_model.state_dict())
         peak_memory = max(peak_memory_values) if device.type == "cuda" else None
+        peak_reserved = max(peak_reserved_values) if device.type == "cuda" else None
     finally:
-        restore_global_rng_state(saved_rng)
+        restore_global_rng_state(saved_rng, device if distributed_cuda else None)
     if batch_count == 0 or first_loss is None or last_loss is None:
         raise RuntimeError(f"client {client_id} produced no training batches")
     if any(not torch.equal(server_before[name], server_model.state_dict()[name]) for name in server_before):
@@ -323,8 +355,10 @@ def train_client(
         ending_training_accuracy=float(last_accuracy),
         spike_rates={name: value / rate_weights[name] for name, value in rate_sums.items()},
         execution_time_seconds=elapsed,
+        data_wait_time_seconds=data_wait_time,
         update_l2_norm=state_difference_l2_norm(local_state, server_before),
         peak_cuda_memory_bytes=peak_memory,
+        peak_cuda_reserved_bytes=peak_reserved,
         logical_download_bytes=model_payload,
         logical_upload_bytes=model_payload,
         resolved_training_seed=training_seed,

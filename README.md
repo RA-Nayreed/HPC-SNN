@@ -97,7 +97,47 @@ Within this protocol, selecting ten rather than five clients increased mean offi
 
 All six executions passed completion checks. Their scientific status is `not_claimed` because no verified published FedAvg target is configured; this is expected and is not an execution failure or a reproduction claim. Federated and centralized measurements remain visibly separate even where their independent-evaluation rules permit contextual comparison.
 
-## Corrected CIFAR-10 Fed-SNN protocols
+## Single-node distributed FedAvg evaluation
+
+The canonical [manifest](experiments/distributed_evaluation/manifest.yaml) contains 24 exclusive-device tasks: SHD and SSC each use one, two, and four GPUs, CIFAR-10 uses one and two GPUs, and every treatment uses seeds 7, 17, and 27. CIFAR-10 has no four-GPU treatment because only two clients participate in each round. Configuration composition defines each workload once, and GPU-count treatments change execution placement only.
+
+SHD retains the established 256/256 LIF 20/10 FedAvg protocol, derived validation split, example-count aggregation, and best-validation selection. SSC uses the complete 75,466-example official training collection for 20-client alpha-0.5 partitioning, the official 9,981-example validation collection for selection, the 128/128 LIF model and 256-example local batch recorded by the centralized SSC reference, and the official 20,382-example test collection once afterward. SSC is an independent evaluation with no literature target. CIFAR-10 reuses the active non-IID alpha-0.5 S-VGG9 BNTT configuration, selects two of ten clients, uses uniform aggregation, has no internal validation, selects round 100, and evaluates the official test once afterward.
+
+Rank 0 alone selects clients, restores detached CPU updates to selected-client order, invokes the existing configured FedAvg implementation once, validates when the workload provides validation data, checkpoints, and performs official-test evaluation. Client assignment is `selected_position % process_count`; client randomness depends on the scientific seed streams, round, and client ID, never rank or device. Nonzero ranks construct neither validation nor official-test datasets.
+
+Exclusive-device execution uses one process per physical GPU and NCCL. The separate [device-capacity collection](experiments/device_capacity_evaluation/manifest.yaml) provides unmeasured CUDA MPS configurations with two or four client processes on one GPU, Gloo coordination, detached CPU state movement, and deterministic `device_index = process_rank % device_count` mapping. MPS treatments are not part of the 24-task matrix and none is declared preferable. Optional PyTorch profiling is disabled in ordinary executions because traces add overhead.
+
+Each workload’s one-GPU distributed path is its timing and numerical reference. Logical federated communication remains separate from internal process movement, device telemetry, memory, busy time, and Slurm allocation. When Roihu telemetry is available, the execution record stores aggregate and per-device sample counts and utilization minima, means, and maxima; these remain physical-device observations rather than process busy time. No distributed CUDA, NCCL, or MPS execution evidence has been collected, so there is no speedup, utilization, numerical-equivalence, resource, or energy claim.
+
+Validate the matrix and submit it only when execution evidence is required:
+
+~~~bash
+python3 -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/distributed_evaluation/manifest.yaml
+bash scripts/slurm/submit_roihu_distributed_evaluation.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
+  --datasets shd,ssc,cifar10 \
+  --device-counts 1,2,4 \
+  --max-parallel 1
+~~~
+
+The wrapper submits separate one-, two-, and four-GPU arrays so every task receives its configured physical-device count; it automatically finds no four-GPU CIFAR task. It prints a labelled job ID for every submitted allocation group, and `--max-parallel` controls concurrency within each array group. Monitor every returned job and summarize the complete compatible collection with:
+
+~~~bash
+squeue --job <ONE_JOB_ID>,<TWO_JOB_ID>,<FOUR_JOB_ID> --array \
+  -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+mkdir -p "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation"
+sacct -j <ONE_JOB_ID>,<TWO_JOB_ID>,<FOUR_JOB_ID> --array -X -P \
+  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES \
+  > "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation/slurm-accounting.txt"
+fedapfa-summarize-distributed-evaluation \
+  --manifest experiments/distributed_evaluation/manifest.yaml \
+  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/distributed_evaluation" \
+  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation" \
+  --slurm-accounting "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation/slurm-accounting.txt"
+~~~
+
+## CIFAR-10 Fed-SNN protocols
 
 The active Fed-SNN evidence covers the two CIFAR-10 SNN 10/2 rows in Table I. Distribution is the only intended treatment difference: IID versus balanced label-Dirichlet non-IID with alpha 0.5. Both treatments use all 50,000 standard training examples, no internal validation collection, ten total clients, two selected clients, five local epochs, 20 timesteps, momentum 0.95, weight decay `1e-4`, uniform aggregation, and final-round selection. The official 10,000-example test collection is evaluated once after round 100.
 

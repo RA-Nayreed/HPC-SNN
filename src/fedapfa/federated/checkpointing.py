@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 from pathlib import Path
@@ -58,6 +59,8 @@ def save_federated_checkpoint(
     client_records: list[dict],
     round_records: list[dict],
 ) -> None:
+    parallel_execution = config.get("parallel_execution")
+    execution_identity = copy.deepcopy(parallel_execution) if parallel_execution is not None else None
     atomic_torch_save(
         path,
         {
@@ -68,7 +71,11 @@ def save_federated_checkpoint(
             "best_validation_accuracy": best_validation_accuracy,
             "best_validation_round": best_validation_round,
             "selection_generator_state": selection_state,
-            "global_random_states": global_rng_state(),
+            "global_random_states": global_rng_state(
+                torch.device("cuda", torch.cuda.current_device())
+                if config.get("parallel_execution") is not None and torch.cuda.is_available()
+                else None
+            ),
             "split_id": split_id,
             "partition_id": partition_id,
             "model_initialization_id": model_initialization_id,
@@ -76,6 +83,7 @@ def save_federated_checkpoint(
             "resolved_config": config,
             "aggregation_weighting": config["federated"]["aggregation_weighting"],
             "checkpoint_selection": config["federated"]["checkpoint_selection"],
+            "parallel_execution": execution_identity,
             "git_commit": read_git_commit(run_dir),
             "cumulative_download_bytes": cumulative_download_bytes,
             "cumulative_upload_bytes": cumulative_upload_bytes,
@@ -107,6 +115,9 @@ def load_federated_checkpoint(
         "partition_id": partition_id,
         "model_initialization_id": model_initialization_id,
     }
+    if config.get("parallel_execution") is not None:
+        parallel_execution = config["parallel_execution"]
+        expected["parallel_execution"] = parallel_execution
     for key, value in expected.items():
         if checkpoint.get(key) != value:
             raise RuntimeError(f"federated checkpoint {key} is incompatible")
@@ -114,5 +125,10 @@ def load_federated_checkpoint(
         raise RuntimeError("federated checkpoint next_round is invalid")
     model.load_state_dict(checkpoint["global_model_state"], strict=True)
     if restore_random_states:
-        restore_global_rng_state(checkpoint["global_random_states"])
+        restore_global_rng_state(
+            checkpoint["global_random_states"],
+            torch.device("cuda", torch.cuda.current_device())
+            if config.get("parallel_execution") is not None and torch.cuda.is_available()
+            else None,
+        )
     return checkpoint

@@ -83,7 +83,33 @@ Completion requires all 100 rounds, valid partition integrity, 20 clients, the c
 
 All six mandatory scientific executions completed and passed aggregation validation for both treatments and seeds 7, 17, and 27. The [federated summary](../results/federated/federated_summary.md) records the measurements, and the [federated scientific record](../thesis_records/federated_baseline.md) separates evidence, interpretation, and limitations. Observed results do not alter the partition, selection, test-isolation, or acceptance rules in this methods document.
 
-## Corrected CIFAR-10 Fed-SNN evaluation
+## Single-node distributed FedAvg protocol
+
+The canonical collection is `experiments/distributed_evaluation/manifest.yaml`. It contains SHD on one, two, and four GPUs; SSC on one, two, and four GPUs; and the paper-reported non-IID alpha-0.5 CIFAR-10 workload on one and two GPUs. Crossing those eight treatments with seeds 7, 17, and 27 gives exactly 24 tasks: 9 SHD, 9 SSC, and 6 CIFAR-10. CIFAR-10 has no four-GPU treatment because its two selected clients limit useful process count to two. Within a workload, treatment files differ only in execution identity and placement fields; scientific identities are distinct across workloads.
+
+SHD retains 20 total clients, ten selected, 100 rounds, one local epoch, local batch 32, Adam at `0.001`, gradient clipping 1, example-count FedAvg, derived validation, and best-validation selection. SSC uses all 75,466 official training examples for a 20-client label-Dirichlet alpha-0.5 partition, selects ten clients, uses one local epoch, local batch 256 from the established centralized SSC record, the 128/128 LIF model, 700-to-140 channel reduction, 10 ms bins, example-count FedAvg, and the complete official validation collection for selection. Its official test is evaluated once after selection, and no literature target is configured. CIFAR-10 composes the active non-IID Fed-SNN configuration: ten clients, two selected, five local epochs, 20 timesteps, uniform aggregation, no internal validation, round-100 selection, and one later official-test evaluation.
+
+Exclusive-device tasks use one node, one process per physical GPU, NCCL, synchronous rounds, selected-order round-robin assignment, and selected-client aggregation order. Rank 0 creates the deterministic selection once per round. Every process receives and verifies the same global-model identity before local training. Client positions map as `position % process_count`.
+
+Each assigned client receives an independent copy of the incoming global model. Its Python, NumPy, CPU Torch, CUDA, data-loader, dropout, and model randomness derive only from the existing client-training seed stream, communication round, and client ID. Process rank, GPU index, client arrival order, and active device count do not enter the seed. Clients handled by one process train sequentially; clients on different processes may overlap. SNN state-reset behavior is unchanged.
+
+Client results contain client and round identity, selected position, process and device assignment, population and presented-example counts, training seed, update norm, spike statistics, duration, data-wait duration, allocated and reserved CUDA memory, and detached CPU state tensors. Tensor keys, shapes, dtypes, finiteness, and model identity are checked. Missing, duplicate, unexpected, or incompatible results abort the round. Rank 0 restores results to selected-client order and calls the established FedAvg implementation exactly once with the workload’s configured policy. SHD and SSC use:
+
+`w_next = sum(n_k * w_k) / sum(n_k)`
+
+The CIFAR-10 workload instead uses exact uniform weights over its two selected clients. Rank 0 alone validates SHD or SSC, writes run-level metrics and checkpoints, and constructs any official-test dataset after checkpoint selection. CIFAR-10 performs no per-round validation and selects `last.pt` at round 100. Nonzero ranks never construct validation or official-test datasets. A round is durable only after all updates, aggregation, any configured validation, and `last.pt` succeed. Resumption requires matching dataset, scientific identity, device count, client processes per device, process count, process mapping, control backend, CUDA process service, assignment rule, and aggregation order.
+
+Per-round records include physical devices, client processes per device, total processes, process-to-device mapping, client-to-process and client-to-device assignment, client durations and data wait, process and device busy time, client and example counts per process and device, parallel client wall time, summed client time, model distribution, result collection, aggregation, validation, checkpoint, total round time, estimated idle time, load imbalance, and allocated and reserved CUDA memory per process. DataLoader worker count, persistence, pinning, prefetch factor, nonblocking transfer, and batch count are explicit. Per-process resident host memory is recorded before and after workload construction together with the signed difference for every execution attempt, so replicated CIFAR storage is not left unmeasured without making allocation-specific memory values part of resumable topology identity. Available two-second `nvidia-smi` observations are reduced to finite aggregate and per-device utilization statistics while the CSV remains separate job-level telemetry.
+
+Optional PyTorch profiling requires explicit communication rounds and writes rank-specific traces for CPU and CUDA operations, copies, synchronization, model construction, forward, backward, optimizer, aggregation, and validation. It is disabled in the 24 ordinary treatments, never wraps official-test evaluation by default, and its overhead prevents treating traced rounds as ordinary runtime evidence.
+
+Logical communication retains the existing model-download and model-upload definition and must be identical across active device counts. Model broadcast and result collection between processes are stored separately as execution data movement, not federated communication. Slurm elapsed time and allocated GPU-hours are resource accounting and remain separate from active-device execution metrics. No energy interpretation is permitted.
+
+The separate `experiments/device_capacity_evaluation/` collection represents same-GPU packing without adding it to the 24-task matrix. Supported mappings use `process_count = device_count * client_processes_per_device`, with one, two, or four client processes per device, `device_index = process_rank % device_count`, and `device_slot = process_rank // device_count`. Exclusive execution requires one process per GPU, NCCL, and no CUDA process service. Packing requires multiple processes per GPU, Gloo control with detached CPU state movement, and CUDA MPS for local work. No packing level is preferred before Roihu measurement.
+
+The scope remains synchronous FedAvg on one node. Multiple nodes, hierarchical aggregation, stale or asynchronous updates, attention-based client choice, compression, quantization, sparsification, compilation, reduced precision, CUDA graphs, changed neuron equations, and energy claims are excluded. No distributed CUDA, NCCL, or MPS evidence has been collected, so numerical equivalence, speedup, utilization, and device-capacity conclusions remain unavailable.
+
+## CIFAR-10 Fed-SNN evaluation
 
 The active manifest `experiments/published_fedsnn/manifest.yaml` contains the two CIFAR-10 SNN 10/2 Table I treatments crossed with seeds 7, 17, and 27. `cifar10_fedsnn_paper_reported_iid_evaluation` assigns the complete training collection evenly to ten clients with nearly equal class proportions. `cifar10_fedsnn_paper_reported_noniid_evaluation` uses the released balanced label-Dirichlet algorithm with alpha 0.5 and minimum client size ten. Distribution and its associated provenance fields are the only intended treatment difference.
 
@@ -101,7 +127,7 @@ The paper’s 76.44% IID and 73.94% non-IID values are descriptive only. No tole
 
 Remaining discrepancies include the paper’s example-count aggregation equation versus released `Fed.py` uniform aggregation, omitted paper values for timesteps and SNN weight decay, released-source official-test monitoring versus one final project evaluation, and the project training selected clients only while the authors compute every client update before choosing uploaded states.
 
-### Collected corrected evidence
+### Collected evidence
 
 All six mandatory executions completed successfully for seeds 7, 17, and 27. Every run selected round 100, used all 50,000 training examples with zero internal-validation examples, and accessed the complete 10,000-example official test collection exactly once after training.
 
@@ -110,7 +136,7 @@ All six mandatory executions completed successfully for seeds 7, 17, and 27. Eve
 | IID | 81.50% | 82.16% | 81.55% | 81.7367% ± 0.3675 pp | 81.7070% | 76.44% | +5.2967 pp |
 | Label-Dirichlet non-IID, alpha 0.5 | 72.01% | 75.80% | 73.32% | 73.7100% ± 1.9249 pp | 73.5136% | 73.94% | -0.2300 pp |
 
-The [generated summary](../results/fedsnn_paper_evaluation/published_fedsnn_summary.md) is the active Fed-SNN evidence. The corrected implementation learns successfully. The non-IID mean closely agrees with the paper’s descriptive value, while the IID mean exceeds its reference by 5.2967 percentage points. The descriptive IID-to-non-IID reduction is 8.0267 percentage points. Macro-F1 tracks accuracy closely and supplies no evidence of class collapse.
+The [generated summary](../results/fedsnn_paper_evaluation/published_fedsnn_summary.md) is the active Fed-SNN evidence. The implementation learns successfully. The non-IID mean closely agrees with the paper’s descriptive value, while the IID mean exceeds its reference by 5.2967 percentage points. The descriptive IID-to-non-IID reduction is 8.0267 percentage points. Macro-F1 tracks accuracy closely and supplies no evidence of class collapse.
 
 These three-seed observations do not establish statistical significance, causality, novelty, energy efficiency, exact source equivalence, or an exact reproduction pass. Scientific status remains `equivalence_not_established`.
 
@@ -118,4 +144,4 @@ The earlier CIFAR-10 implementation completed with 18.23–26.79% official-test 
 
 ## Centralized CIFAR-10 learning verification
 
-`experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml` uses the corrected data representation and S-VGG9 model with a distinct `runs/fedsnn_centralized_verification` identity. It fits the 45,000-example training subset, selects by the 5,000-example validation subset, and evaluates the official test once. This configuration remains an independent model-learning check and is not part of the six-task federated manifest. The completed federated evidence above independently demonstrates that the corrected implementation learns under the declared Table I protocol.
+`experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml` uses the data representation and S-VGG9 model with a distinct `runs/fedsnn_centralized_verification` identity. It fits the 45,000-example training subset, selects by the 5,000-example validation subset, and evaluates the official test once. This configuration remains an independent model-learning check and is not part of the six-task federated manifest. The completed federated evidence above independently demonstrates that the implementation learns under the declared Table I protocol.

@@ -32,6 +32,15 @@ PAPER_EXPERIMENTS = {
         0.7394,
     ),
 }
+PAPER_DISTRIBUTED_EXPERIMENTS = {
+    "cifar10_svgg9_bntt_noniid_1_gpu": "cifar10_fedsnn_paper_reported_noniid_evaluation",
+    "cifar10_svgg9_bntt_noniid_2_gpu": "cifar10_fedsnn_paper_reported_noniid_evaluation",
+}
+
+
+def _paper_experiment_name(config: Mapping[str, Any]) -> str:
+    name = str(config.get("name", ""))
+    return PAPER_DISTRIBUTED_EXPERIMENTS.get(name, name)
 
 
 def _section(config: Mapping[str, Any], key: str) -> Mapping[str, Any]:
@@ -107,6 +116,47 @@ def _validate_dataset_and_model(config: Mapping[str, Any]) -> None:
             raise ConfigurationError("SHD federated evaluation requires ATan surrogate alpha 5")
         if acceptance.get("expected_model_class") != "AudioLIFSNN":
             raise ConfigurationError("acceptance.expected_model_class must be AudioLIFSNN")
+    elif (dataset_name, model_name) == ("ssc", "lif_2layer_128"):
+        expected_dataset = {
+            "train_file": "ssc_train.h5",
+            "validation_file": "ssc_valid.h5",
+            "test_file": "ssc_test.h5",
+            "classes": 35,
+            "raw_channels": 700,
+            "input_features": 140,
+            "frequency_bin_factor": 5,
+            "temporal_bin_ms": 10.0,
+        }
+        for key, expected in expected_dataset.items():
+            if dataset.get(key) != expected:
+                raise ConfigurationError(f"dataset.{key} must be {expected!r}")
+        if model.get("hidden_dims") != [128, 128]:
+            raise ConfigurationError("SSC federated evaluation requires hidden_dims [128, 128]")
+        if (
+            model.get("dropout") != 0.4
+            or model.get("batch_normalization") is not False
+            or model.get("bias") is not True
+        ):
+            raise ConfigurationError("SSC federated evaluation requires dropout 0.4, no batch normalization, and bias")
+        attention = _section(model, "attention")
+        if attention.get("variant") != "none":
+            raise ConfigurationError("SSC federated evaluation requires attention variant none")
+        neuron = _section(model, "neuron")
+        surrogate = _section(neuron, "surrogate")
+        expected_neuron = {
+            "name": "spikingjelly_lif",
+            "tau_ms": 10.05,
+            "threshold": 1.0,
+            "reset": "subtract",
+            "detach_reset": True,
+        }
+        for key, expected in expected_neuron.items():
+            if neuron.get(key) != expected:
+                raise ConfigurationError(f"model.neuron.{key} must be {expected!r}")
+        if surrogate.get("name") != "atan" or surrogate.get("alpha") != 5.0:
+            raise ConfigurationError("SSC federated evaluation requires ATan surrogate alpha 5")
+        if acceptance.get("expected_model_class") != "AudioLIFSNN":
+            raise ConfigurationError("acceptance.expected_model_class must be AudioLIFSNN")
     elif (dataset_name, model_name) == ("cifar10", "svgg9_bntt"):
         expected_dataset = {
             "classes": 10,
@@ -122,7 +172,7 @@ def _validate_dataset_and_model(config: Mapping[str, Any]) -> None:
                 raise ConfigurationError(f"dataset.{key} must be {expected!r}")
         transforms = _section(dataset, "transforms")
         if transforms.get("image_size") != 32 or transforms.get("normalization") != "signed_minus_one_one":
-            raise ConfigurationError("corrected CIFAR-10 transforms require 32x32 signed_minus_one_one inputs")
+            raise ConfigurationError("paper-reported CIFAR-10 transforms require 32x32 signed_minus_one_one inputs")
         augmentation = _section(transforms, "augmentation")
         if (
             augmentation.get("random_crop") is not False
@@ -130,29 +180,31 @@ def _validate_dataset_and_model(config: Mapping[str, Any]) -> None:
             or augmentation.get("horizontal_flip") is not False
             or augmentation.get("horizontal_flip_probability") != 0.0
         ):
-            raise ConfigurationError("corrected CIFAR-10 source configurations disable crop and flip")
+            raise ConfigurationError("paper-reported CIFAR-10 source configurations disable crop and flip")
         if model.get("channels") != [64, 64, 128, 128, 256, 256, 256]:
             raise ConfigurationError("S-VGG9 BNTT channel layout is incompatible")
         if model.get("average_pool_after_convolution") != [2, 4, 7] or model.get("linear_hidden") != 1024:
             raise ConfigurationError("S-VGG9 BNTT pooling or linear layout is incompatible")
         if _positive_integer(model.get("timesteps"), "model.timesteps") != 20:
-            raise ConfigurationError("corrected S-VGG9 BNTT requires 20 configured timesteps")
+            raise ConfigurationError("paper-reported S-VGG9 BNTT requires 20 configured timesteps")
         if model.get("leak") != 0.95 or model.get("threshold") != 1.0 or model.get("surrogate_scale") != 0.3:
             raise ConfigurationError("S-VGG9 BNTT neuron assumptions are incompatible")
         if model.get("bntt_momentum") != 0.1 or model.get("bntt_epsilon") != 0.0001:
-            raise ConfigurationError("corrected S-VGG9 BNTT requires momentum 0.1 and epsilon 1e-4")
+            raise ConfigurationError("paper-reported S-VGG9 BNTT requires momentum 0.1 and epsilon 1e-4")
         if model.get("input_encoding") != "signed_poisson":
-            raise ConfigurationError("corrected S-VGG9 BNTT requires signed_poisson input encoding")
+            raise ConfigurationError("paper-reported S-VGG9 BNTT requires signed_poisson input encoding")
         if model.get("poisson_rescale_factor") != 2.0:
-            raise ConfigurationError("corrected S-VGG9 BNTT requires Poisson rescale factor 2.0")
+            raise ConfigurationError("paper-reported S-VGG9 BNTT requires Poisson rescale factor 2.0")
         if model.get("readout") != "temporal_mean":
-            raise ConfigurationError("corrected S-VGG9 BNTT requires temporal_mean readout")
+            raise ConfigurationError("paper-reported S-VGG9 BNTT requires temporal_mean readout")
         if model.get("weight_initialization") != "xavier_uniform_gain_2":
-            raise ConfigurationError("corrected S-VGG9 BNTT requires xavier_uniform_gain_2 initialization")
+            raise ConfigurationError("paper-reported S-VGG9 BNTT requires xavier_uniform_gain_2 initialization")
         if acceptance.get("expected_model_class") != "SVGG9BNTT":
             raise ConfigurationError("acceptance.expected_model_class must be SVGG9BNTT")
     elif dataset_name == "shd":
         raise ConfigurationError("SHD cannot be paired with S-VGG9 BNTT")
+    elif dataset_name == "ssc":
+        raise ConfigurationError("SSC cannot be paired with S-VGG9 BNTT")
     elif dataset_name == "cifar10":
         raise ConfigurationError("CIFAR-10 cannot be paired with AudioLIFSNN")
     else:
@@ -192,7 +244,7 @@ def _validate_optimizer(federation: Mapping[str, Any], protocol: str) -> None:
     else:
         raise ConfigurationError(f"unsupported federated optimizer: {optimizer}")
     if protocol == "independent_evaluation" and (optimizer != "adam" or learning_rate != 0.001):
-        raise ConfigurationError("SHD independent evaluation requires Adam at learning rate 0.001")
+        raise ConfigurationError("independent federated evaluation requires Adam at learning rate 0.001")
     if protocol in CIFAR_PROTOCOLS | {"published_protocol"} and (
         optimizer != "sgd" or learning_rate != 0.1 or federation.get("momentum") != 0.95
     ):
@@ -297,28 +349,41 @@ def validate_federated_config(config: Mapping[str, Any]) -> None:
     _validate_optimizer(federation, config["protocol"])
 
     if config["protocol"] == "independent_evaluation":
-        if config["dataset"]["name"] != "shd":
-            raise ConfigurationError("independent federated evaluation is defined for SHD")
-        if (clients, selected, local_epochs, batch_size) not in {(20, 10, 1, 32), (20, 5, 1, 32)}:
-            raise ConfigurationError("SHD federated client, participation, epoch, or batch settings are incompatible")
+        dataset_name = config["dataset"]["name"]
+        if dataset_name not in {"shd", "ssc"}:
+            raise ConfigurationError("independent federated evaluation is defined for SHD and SSC")
+        compatible = (
+            (clients, selected, local_epochs, batch_size) in {(20, 10, 1, 32), (20, 5, 1, 32)}
+            if dataset_name == "shd"
+            else (clients, selected, local_epochs, batch_size) == (20, 10, 1, 256)
+        )
+        if not compatible:
+            raise ConfigurationError(
+                f"{dataset_name.upper()} federated client, participation, epoch, or batch settings are incompatible"
+            )
         if federation.get("weight_decay") != 0.0 or federation.get("gradient_clip") != 1.0:
-            raise ConfigurationError("SHD independent evaluation requires zero weight decay and clipping 1.0")
+            raise ConfigurationError("independent federated evaluation requires zero weight decay and clipping 1.0")
         if (
             federation.get("drop_last_local_batch") is not False
             or federation.get("aggregation_weighting") != "example_count"
             or federation.get("checkpoint_selection") != "best_validation"
         ):
             raise ConfigurationError(
-                "SHD independent evaluation requires retained local batches, "
+                "independent federated evaluation requires retained local batches, "
                 "example-count weighting, and best-validation selection"
             )
     elif config["protocol"] in CIFAR_PROTOCOLS:
         if config["dataset"]["name"] != "cifar10":
             raise ConfigurationError("published Fed-SNN protocol is defined for CIFAR-10")
-        if config["name"] not in PAPER_EXPERIMENTS:
+        paper_name = _paper_experiment_name(config)
+        if paper_name not in PAPER_EXPERIMENTS:
             raise ConfigurationError("paper-reported Fed-SNN experiment identity is unsupported")
         normalized_output_root = config["output_root"].replace("\\", "/").rstrip("/")
-        if not (
+        distributed_output = "parallel_execution" in config and (
+            normalized_output_root == "runs/distributed_evaluation"
+            or normalized_output_root.endswith("/runs/distributed_evaluation")
+        )
+        if not distributed_output and not (
             normalized_output_root == "runs/fedsnn_paper_evaluation"
             or normalized_output_root.endswith("/runs/fedsnn_paper_evaluation")
         ):
@@ -339,7 +404,7 @@ def validate_federated_config(config: Mapping[str, Any]) -> None:
             or federation.get("checkpoint_selection") != "final_round"
         ):
             raise ConfigurationError(
-                "corrected Fed-SNN configurations require dropped local remainders, "
+                "paper-reported Fed-SNN configurations require dropped local remainders, "
                 "uniform aggregation, and final-round selection"
             )
         assumptions = config.get("protocol_assumptions")
@@ -355,7 +420,7 @@ def validate_federated_config(config: Mapping[str, Any]) -> None:
             "released_source",
             "interpretations",
         }:
-            raise ConfigurationError("corrected Fed-SNN protocol requires paper/source/interpretation disclosures")
+            raise ConfigurationError("paper-reported Fed-SNN protocol requires paper/source/interpretation disclosures")
         if any(
             not isinstance(values, list)
             or not values
@@ -379,7 +444,7 @@ def validate_federated_config(config: Mapping[str, Any]) -> None:
         _finite_positive(partition.get("alpha"), "federated.partition.alpha")
         _positive_integer(partition.get("maximum_attempts"), "federated.partition.maximum_attempts")
     if config["protocol"] == "paper_reported_evaluation":
-        expected_method, expected_alpha, _ = PAPER_EXPERIMENTS[config["name"]]
+        expected_method, expected_alpha, _ = PAPER_EXPERIMENTS[_paper_experiment_name(config)]
         if method != expected_method or partition.get("alpha") != expected_alpha or minimum_examples != 10:
             raise ConfigurationError(
                 "paper-reported evaluation has an incompatible distribution or minimum client size"
@@ -392,6 +457,15 @@ def validate_federated_config(config: Mapping[str, Any]) -> None:
         raise ConfigurationError("federated.persistent_workers must be boolean")
     if federation["persistent_workers"] and workers == 0:
         raise ConfigurationError("persistent workers require at least one data-loader worker")
+    if "pin_memory" in federation and not isinstance(federation["pin_memory"], bool):
+        raise ConfigurationError("federated.pin_memory must be boolean")
+    prefetch = federation.get("prefetch_factor")
+    if prefetch is not None and (not isinstance(prefetch, int) or isinstance(prefetch, bool) or prefetch <= 0):
+        raise ConfigurationError("federated.prefetch_factor must be a positive integer or null")
+    if workers == 0 and prefetch is not None:
+        raise ConfigurationError("federated.prefetch_factor requires at least one data-loader worker")
+    if "non_blocking_transfer" in federation and not isinstance(federation["non_blocking_transfer"], bool):
+        raise ConfigurationError("federated.non_blocking_transfer must be boolean")
     communication = _section(federation, "communication")
     if (
         communication.get("model_downloads_per_selected_client") != 1
@@ -435,12 +509,12 @@ def validate_federated_config(config: Mapping[str, Any]) -> None:
         raise ConfigurationError("independent evaluation cannot configure a paper accuracy target")
     if config["dataset"]["name"] == "cifar10":
         if reference is not None or tolerance is not None:
-            raise ConfigurationError("corrected Fed-SNN protocols cannot configure an acceptance target")
-        expected_descriptive = PAPER_EXPERIMENTS[config["name"]][2]
+            raise ConfigurationError("paper-reported Fed-SNN protocols cannot configure an acceptance target")
+        expected_descriptive = PAPER_EXPERIMENTS[_paper_experiment_name(config)][2]
         if descriptive_reference != expected_descriptive:
             raise ConfigurationError("the paper-reported protocol has the wrong descriptive reference")
     elif descriptive_reference is not None:
-        raise ConfigurationError("descriptive_reference_accuracy is reserved for corrected CIFAR-10 protocols")
+        raise ConfigurationError("descriptive_reference_accuracy is reserved for paper-reported CIFAR-10 protocols")
 
 
 def paired_configuration_identity(config: Mapping[str, Any]) -> dict[str, Any]:

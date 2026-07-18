@@ -1,0 +1,8 @@
+include:
+  - svgg9_bntt_noniid_reference.yaml
+name: cifar10_svgg9_bntt_noniid_2_gpu
+parallel_execution:
+  device_count: 2
+  process_count: 2
+metadata:
+  experiment: cifar10_svgg9_bntt_noniid_2_gpu

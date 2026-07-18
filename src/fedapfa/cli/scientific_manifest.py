@@ -9,6 +9,8 @@ from pathlib import Path
 import yaml
 
 from fedapfa.configuration import (
+    load_device_capacity_manifest,
+    load_distributed_evaluation_manifest,
     load_heterogeneity_context_tasks,
     load_heterogeneity_manifest,
     load_published_fedsnn_manifest,
@@ -28,6 +30,10 @@ def _tasks(path: str):
         return load_heterogeneity_manifest(path)
     if collection == "published_fedsnn":
         return load_published_fedsnn_manifest(path)
+    if collection == "distributed_evaluation":
+        return load_distributed_evaluation_manifest(path)
+    if collection == "device_capacity_evaluation":
+        return load_device_capacity_manifest(path)
     raise ValueError(f"unsupported scientific collection: {collection}")
 
 
@@ -63,19 +69,29 @@ def main() -> None:
         if context_action:
             print("\t".join((str(value.seed), value.experiment, value.source_record["run_directory"])))
         else:
-            print(
-                "\t".join(
-                    (
-                        str(value.config_path),
-                        str(value.seed),
-                        value.dataset,
-                        value.mode,
-                        value.protocol,
-                        value.experiment,
-                        str(value.config["federated"]["participation_fraction"]),
+            fields = [
+                str(value.config_path),
+                str(value.seed),
+                value.dataset,
+                value.mode,
+                value.protocol,
+                value.experiment,
+                str(value.config["federated"]["participation_fraction"]),
+            ]
+            if "parallel_execution" in value.config:
+                parallel = value.config["parallel_execution"]
+                fields.extend(
+                    str(item)
+                    for item in (
+                        parallel["device_count"],
+                        parallel["client_processes_per_device"],
+                        parallel["process_count"],
+                        parallel["control_backend"],
+                        parallel["cuda_process_service"],
+                        value.config["output_root"],
                     )
                 )
-            )
+            print("\t".join(fields))
 
 
 if __name__ == "__main__":

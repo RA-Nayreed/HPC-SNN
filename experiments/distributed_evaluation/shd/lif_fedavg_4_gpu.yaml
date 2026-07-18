@@ -1,0 +1,8 @@
+include:
+  - lif_fedavg_reference.yaml
+name: shd_lif_fedavg_4_gpu
+parallel_execution:
+  device_count: 4
+  process_count: 4
+metadata:
+  experiment: shd_lif_fedavg_4_gpu

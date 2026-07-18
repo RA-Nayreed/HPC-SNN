@@ -1,0 +1,11 @@
+include:
+  - ../../distributed_evaluation/shd/lif_fedavg_reference.yaml
+name: shd_lif_fedavg_1_gpu_1_client_process
+output_root: runs/device_capacity_evaluation
+pairing_group: shd_lif_fedavg_device_capacity_evaluation
+parallel_execution:
+  device_count: 1
+  process_count: 1
+metadata:
+  experiment: shd_lif_fedavg_1_gpu_1_client_process
+  purpose: device_capacity_evaluation

@@ -1,0 +1,10 @@
+include:
+  - ../../distributed_evaluation/shd/lif_fedavg_reference.yaml
+output_root: runs/device_capacity_evaluation
+pairing_group: shd_lif_fedavg_device_capacity_evaluation
+parallel_execution:
+  device_count: 1
+  control_backend: gloo
+  cuda_process_service: mps
+metadata:
+  purpose: device_capacity_evaluation

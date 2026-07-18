@@ -8,8 +8,7 @@ import shlex
 import sys
 
 from fedapfa.configuration import load_federated_config, validate_federated_config
-from fedapfa.datasets.cifar10 import prepare_federated_cifar10
-from fedapfa.federated.data_protocol import prepare_federated_shd
+from fedapfa.federated.data_protocol import prepare_federated_workload
 from fedapfa.training.centralized import resolve_device
 from fedapfa.training.federated import make_initialized_federated_model, train_federated
 from fedapfa.utilities.run_records import initialize_run, plan_run
@@ -47,11 +46,7 @@ def main() -> None:
         print(f"completed federated execution already exists; skipping: {action.run_dir}")
         return
     resolve_device(config["device"])
-    bundle = (
-        prepare_federated_shd(config)
-        if config["dataset"]["name"] == "shd"
-        else prepare_federated_cifar10(config)
-    )
+    bundle = prepare_federated_workload(config, coordinator=True)
     model = make_initialized_federated_model(config)
     run_dir = initialize_run(
         config,

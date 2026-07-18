@@ -1,4 +1,4 @@
-"""Truthful completion assessment for the SHD FedAvg reference."""
+"""Truthful completion assessment for federated scientific executions."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
         failures.append(f"required scientific record is missing or invalid: {error}")
     rounds = config["federated"]["rounds"]
     clients_per_round = config["federated"]["clients_per_round"]
-    validation_expected = config["dataset"]["validation_fraction"] > 0
+    validation_expected = config["federated"]["checkpoint_selection"] == "best_validation"
     if len(round_records) != rounds:
         failures.append(f"expected {rounds} round records, found {len(round_records)}")
     if len(client_records) != rounds * clients_per_round:
@@ -79,8 +79,10 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
         "ending_training_accuracy",
         "spike_rates",
         "execution_time_seconds",
+        "data_wait_time_seconds",
         "update_l2_norm",
         "peak_cuda_memory_bytes",
+        "peak_cuda_reserved_bytes",
         "logical_download_bytes",
         "logical_upload_bytes",
         "logical_total_bytes",
@@ -207,7 +209,7 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
         failures.append("split identity does not match its artifact")
     if sorted(assigned) != sorted(training_indices) or len(assigned) != len(set(assigned)):
         failures.append("eligible training indices were not assigned exactly once")
-    if set(assigned).intersection(validation_indices):
+    if split.get("validation_collection") != "official_validation" and set(assigned).intersection(validation_indices):
         failures.append("validation indices leaked into client partitions")
     minimum_size = config["federated"]["partition"]["minimum_examples_per_client"]
     if any(client.get("size") != len(client.get("indices", [])) for client in partition.get("clients", [])):
@@ -298,7 +300,7 @@ def evaluate_federated_acceptance(config: dict, run_dir: str | Path, final_metri
         failures.append("model class does not match the configured reference")
     if validation_expected:
         if final_metrics.get("best_validation_accuracy") is None or final_metrics.get("selected_validation") is None:
-            failures.append("internal validation metrics are missing")
+            failures.append("checkpoint-selection validation metrics are missing")
     else:
         unavailable = (
             final_metrics.get("best_validation_accuracy"),

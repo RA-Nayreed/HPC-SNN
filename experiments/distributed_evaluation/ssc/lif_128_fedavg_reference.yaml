@@ -1,0 +1,42 @@
+include:
+  - ../../../configs/base/centralized.yaml
+  - ../../../configs/datasets/ssc.yaml
+  - ../../../configs/models/lif_2layer_128.yaml
+  - ../../../configs/attention/none.yaml
+  - ../../../configs/federated/fedavg.yaml
+mode: scientific_evaluation
+execution: federated
+protocol: independent_evaluation
+device: cuda
+output_root: runs/distributed_evaluation
+pairing_group: ssc_lif_128_fedavg_distributed_evaluation
+dataset:
+  validation_fraction: 0.0
+federated:
+  participation_fraction: 0.50
+  clients_per_round: 10
+  local_batch_size: 256
+  pin_memory: false
+  prefetch_factor: 2
+  non_blocking_transfer: true
+parallel_execution:
+  node_count: 1
+  client_processes_per_device: 1
+  control_backend: nccl
+  cuda_process_service: none
+  client_assignment: selected_order_round_robin
+  aggregation_order: selected_client_order
+  synchronize_each_round: true
+execution_measurement:
+  profiler_enabled: false
+  profiled_rounds: []
+  record_cuda_memory: true
+  record_device_utilization: true
+  utilization_interval_seconds: 2
+metadata:
+  purpose: distributed_evaluation
+  centralized_context: ssc_lif_128_independent_evaluation
+acceptance:
+  expected_model_class: AudioLIFSNN
+  reference_test_accuracy: null
+  absolute_tolerance: null

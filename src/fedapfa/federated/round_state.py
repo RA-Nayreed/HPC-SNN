@@ -29,8 +29,10 @@ class ClientResult:
     ending_training_accuracy: float
     spike_rates: dict[str, float]
     execution_time_seconds: float
+    data_wait_time_seconds: float
     update_l2_norm: float
     peak_cuda_memory_bytes: int | None
+    peak_cuda_reserved_bytes: int | None
     logical_download_bytes: int
     logical_upload_bytes: int
     resolved_training_seed: int

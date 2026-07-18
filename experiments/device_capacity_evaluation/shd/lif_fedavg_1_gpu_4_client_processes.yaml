@@ -1,0 +1,8 @@
+include:
+  - lif_fedavg_mps_reference.yaml
+name: shd_lif_fedavg_1_gpu_4_client_processes
+parallel_execution:
+  client_processes_per_device: 4
+  process_count: 4
+metadata:
+  experiment: shd_lif_fedavg_1_gpu_4_client_processes

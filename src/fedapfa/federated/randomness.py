@@ -22,18 +22,29 @@ def resolved_seeds(config: dict) -> dict[str, int]:
     }
 
 
-def global_rng_state() -> dict[str, Any]:
-    return {
+def global_rng_state(cuda_device: torch.device | None = None) -> dict[str, Any]:
+    state = {
         "python": random.getstate(),
         "numpy": np.random.get_state(),
         "torch_cpu": torch.get_rng_state(),
-        "torch_cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+        "torch_cuda": None,
     }
+    if torch.cuda.is_available():
+        if cuda_device is None:
+            state["torch_cuda"] = torch.cuda.get_rng_state_all()
+        else:
+            state["torch_cuda_device"] = torch.cuda.get_rng_state(cuda_device)
+            state["torch_cuda_device_index"] = cuda_device.index
+    return state
 
 
-def restore_global_rng_state(state: dict[str, Any]) -> None:
+def restore_global_rng_state(state: dict[str, Any], cuda_device: torch.device | None = None) -> None:
     random.setstate(state["python"])
     np.random.set_state(state["numpy"])
     torch.set_rng_state(state["torch_cpu"])
     if state.get("torch_cuda") is not None and torch.cuda.is_available():
         torch.cuda.set_rng_state_all(state["torch_cuda"])
+    if state.get("torch_cuda_device") is not None and torch.cuda.is_available():
+        if cuda_device is None or cuda_device.index != state.get("torch_cuda_device_index"):
+            raise RuntimeError("CUDA random state device is incompatible")
+        torch.cuda.set_rng_state(state["torch_cuda_device"], cuda_device)

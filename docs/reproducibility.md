@@ -134,21 +134,68 @@ done
 
 The generated output paths are `$WORK_DIR/results/federated/federated_summary.json`, `$WORK_DIR/results/federated/federated_summary.csv`, and `$WORK_DIR/results/federated/federated_summary.md`. Run-level evidence remains below `$WORK_DIR/runs/federated`, Slurm output below `$WORK_DIR/slurm-logs/federated`, and device telemetry below `$WORK_DIR/telemetry/federated`.
 
+## Distributed evaluation identity and resumption
+
+The distributed [manifest](../experiments/distributed_evaluation/manifest.yaml) expands to 24 tasks: SHD and SSC each contribute one-, two-, and four-GPU treatments, CIFAR-10 contributes one- and two-GPU treatments, and all use seeds 7, 17, and 27. CIFAR-10 cannot request four devices because only two clients participate. Scientific identity is equal across physical-device treatments within a dataset and different across SHD, SSC, and CIFAR-10. Each dataset’s one-GPU distributed execution is its reference; sequential runtimes and other datasets are outside its paired denominator.
+
+Every process agrees on configuration, Git, dataset, split, partition, model initialization, seed identities, process count, physical-device count, control backend, CUDA process service, and single host. Exclusive execution maps one process to each visible GPU through `LOCAL_RANK`, uses NCCL, and rejects mismatched visibility. Same-GPU packing uses Gloo for CPU control and detached state movement while CUDA MPS serves local client work. Its mapping is deterministic by process rank and configured physical-device count. CPU Gloo remains restricted to integration testing.
+
+Run provenance includes `execution_provenance.json` and `process_mapping.json`; the latter contains stable rank, process, and device topology fields so a compatible allocation can resume on another host. `execution_measurements.json` records every distinct Slurm allocation used by an interrupted execution, each attempt's host and process mapping, resident host memory before and after workload construction, the signed memory difference, MPS archive and active-thread percentage when applicable, client/process/device counts, busy and idle durations, load imbalance, allocated and reserved memory, internal data movement, resumption count, and official-test duration. Summary accounting requires a row for every recorded allocation, sums their GPU-hours and elapsed time, and requires the completing allocation to report `COMPLETED` with exit code `0:0`; non-completing allocation states remain visible instead of being discarded. When the Roihu CSV is available, it also records finite physical-device utilization sample counts and aggregate and per-device minima, means, and maxima. Job-level utilization covers only its named execution attempt; the summarizer excludes that value from treatment statistics after resumption rather than presenting it as complete-run utilization. `round_metrics.jsonl` records ordered assignments and model/update identities. `client_metrics.jsonl` records process/device placement, population and presented examples, batches, data wait, seed, spike statistics, duration, and memory.
+
+Distributed checkpoints retain the entire resolved configuration and complete `parallel_execution` identity. Resumption rejects another dataset, scientific identity, device count, client processes per device, total process count, process mapping, control backend, CUDA process service, assignment rule, aggregation order, Git state, split, partition, or initialization. Only a completely collected and aggregated round, including configured validation and `last.pt`, advances durability. A failure during client work repeats the entire round from its incoming checkpoint. Rank 0 is the sole owner of shared checkpoints, metrics, validation, official-test, and acceptance records.
+
+The logical communication count excludes process transfers and remains directly comparable only within one scientific workload. Internal model distribution and collected update bytes are execution data movement. The summarizer groups by workload and then execution treatment, compares each seed with its own workload’s one-GPU execution, checks scientific, split, partition, selection, seed, example-count, aggregation, checkpoint, communication, and test-access identities, and measures maximum absolute and relative checkpoint-parameter differences, selected-round equality, accuracy and macro-F1 differences, and prediction agreement when predictions exist. Accuracy similarity alone is not numerical equivalence, and no tolerance is invented.
+
+Validate the collection locally:
+
+~~~bash
+fedapfa-validate-config experiments/distributed_evaluation/shd/lif_fedavg_1_gpu.yaml
+fedapfa-validate-config experiments/distributed_evaluation/shd/lif_fedavg_2_gpu.yaml
+fedapfa-validate-config experiments/distributed_evaluation/shd/lif_fedavg_4_gpu.yaml
+fedapfa-validate-config experiments/distributed_evaluation/ssc/lif_128_fedavg_1_gpu.yaml
+fedapfa-validate-config experiments/distributed_evaluation/ssc/lif_128_fedavg_2_gpu.yaml
+fedapfa-validate-config experiments/distributed_evaluation/ssc/lif_128_fedavg_4_gpu.yaml
+fedapfa-validate-config experiments/distributed_evaluation/cifar10/svgg9_bntt_noniid_1_gpu.yaml
+fedapfa-validate-config experiments/distributed_evaluation/cifar10/svgg9_bntt_noniid_2_gpu.yaml
+python3 -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/distributed_evaluation/manifest.yaml
+python3 -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/device_capacity_evaluation/manifest.yaml
+python3 -m pytest -q tests/unit/distributed/test_gloo_integration.py
+~~~
+
+Optional profiler traces require `profiler_enabled: true` and explicit `profiled_rounds`; they add overhead and are excluded from ordinary runtime interpretation. The 24-task manifest leaves profiling disabled. The separate device-capacity collection represents unmeasured MPS configurations and does not identify a preferred packing level.
+
+No distributed CUDA, NCCL, or MPS run is committed. Once all 24 compatible tasks exist, aggregate them with:
+
+~~~bash
+WORK_DIR="/scratch/$CSC_PROJECT/$USER/hpc-snn"
+mkdir -p "$WORK_DIR/results/distributed_evaluation"
+sacct -j <JOB_ID> --array -X -P \
+  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES \
+  > "$WORK_DIR/results/distributed_evaluation/slurm-accounting.txt"
+fedapfa-summarize-distributed-evaluation \
+  --manifest experiments/distributed_evaluation/manifest.yaml \
+  --runs-root "$WORK_DIR/runs/distributed_evaluation" \
+  --output-dir "$WORK_DIR/results/distributed_evaluation" \
+  --slurm-accounting "$WORK_DIR/results/distributed_evaluation/slurm-accounting.txt"
+~~~
+
 ## GPU telemetry scope
 
 The Roihu array script samples supported `nvidia-smi` fields every two seconds and records the command, interval, unsupported fields, and CSV observations. Sampling begins before training and is stopped on normal exit, failure, or signal. These observations are job-level GPU telemetry. They are not measured network traffic, per-client energy, neural-model energy, or neuromorphic energy, and their sampling interval limits short-event attribution.
 
 The committed aggregation does not contain device-utilization or energy estimates. Logical communication counts communicated tensors and cannot be interpreted as network traffic or energy. A scheduler time limit is a reservation constraint, not an observed execution time.
 
-## Corrected CIFAR-10 Fed-SNN identity
+## CIFAR-10 Fed-SNN identity
 
-The corrected configurations use experiment names `cifar10_fedsnn_paper_reported_iid_evaluation` and `cifar10_fedsnn_paper_reported_noniid_evaluation` under `runs/fedsnn_paper_evaluation`. The unsuccessful independent implementation retains its original name and `runs/published_fedsnn` root; the superseded, unexecuted released-command identity is also different. Automatic resumption therefore cannot resolve either identity into a corrected directory.
+The configurations use experiment names `cifar10_fedsnn_paper_reported_iid_evaluation` and `cifar10_fedsnn_paper_reported_noniid_evaluation` under `runs/fedsnn_paper_evaluation`. The unsuccessful independent implementation retains its original name and `runs/published_fedsnn` root; the superseded, unexecuted released-command identity is also different. Automatic resumption therefore cannot resolve either identity into a directory.
 
 Checkpoint compatibility hashes the entire resolved configuration and also stores and verifies `aggregation_weighting` and `checkpoint_selection` explicitly. A change between `uniform` and `example_count`, or between `final_round` and `best_validation`, is incompatible. Split, partition, model-initialization, Git, and experiment identities remain mandatory.
 
 Each client record distinguishes original client population, examples presented per local epoch, and total examples presented over local epochs. Round records store the aggregation policy, exact resolved weights, selected populations, and presented counts. Communication accounting is unchanged: one model download and one upload per selected client.
 
-The corrected manifest expands to six tasks: IID and non-IID treatments times seeds 7, 17, and 27. Both use all 50,000 training examples, no internal validation collection, final-round selection, and exactly one post-training official-test access. Their resolved configurations differ only in experiment identity and distribution-specific fields. Resume from `last.pt` preserves the final-round policy; compatibility rejects changes to configuration, aggregation weighting, selection policy, split, partition, initialization, Git, or experiment identity.
+The manifest expands to six tasks: IID and non-IID treatments times seeds 7, 17, and 27. Both use all 50,000 training examples, no internal validation collection, final-round selection, and exactly one post-training official-test access. Their resolved configurations differ only in experiment identity and distribution-specific fields. Resume from `last.pt` preserves the final-round policy; compatibility rejects changes to configuration, aggregation weighting, selection policy, split, partition, initialization, Git, or experiment identity.
 
 The summarizer refuses to pool the two treatments. It reports distribution and alpha, completed seeds, final round, official-test accuracy and macro-F1, both descriptive references, signed and absolute percentage-point differences, optimizer settings, client counts, timesteps, aggregation, 50,000/0/10,000 data counts, official-test access count, and `equivalence_not_established`. It does not report best-validation accuracy when no internal validation collection exists, and no tolerance exists.
 
@@ -164,4 +211,4 @@ IID official-test accuracy was 81.50%, 82.16%, and 81.55%, with mean 81.7367% an
 
 The recorded execution commit is [`d71cfe4c4fdc7c3480806a5f1302c164273dfb82`](../results/fedsnn_paper_evaluation/provenance/execution-commit.txt). The manifest at that commit hashes to `e25d4d760cffe9475b09673888c6b0e21ba56d1dd8ddc436ffe84b3029db672c`, exactly matching the [stored manifest hash](../results/fedsnn_paper_evaluation/provenance/manifest-sha256.txt). The [Slurm accounting record](../results/fedsnn_paper_evaluation/provenance/slurm-accounting.txt) identifies tasks `236880_0` through `236880_5`; every task is `COMPLETED` with exit code `0:0`. The separate `slurm-array-id.txt` contains no identifier, so array identity is taken from the accounting record rather than inferred from that empty field.
 
-The corrected evidence is the active Fed-SNN reference. The unsuccessful superseded 18.23–26.79% independent implementation remains unchanged and separate; it is neither pooled with nor averaged into these results. The three-seed results support protocol-aligned learning validation but not statistical significance, causality, novelty, energy efficiency, implementation equivalence, or an exact reproduction pass.
+The evidence is the active Fed-SNN reference. The unsuccessful superseded 18.23–26.79% independent implementation remains unchanged and separate; it is neither pooled with nor averaged into these results. The three-seed results support protocol-aligned learning validation but not statistical significance, causality, novelty, energy efficiency, implementation equivalence, or an exact reproduction pass.

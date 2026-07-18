@@ -201,6 +201,23 @@ def test_local_loader_drops_remainders_but_evaluation_keeps_every_example():
     assert validation.examples == official_test.examples == 5
 
 
+def test_client_loader_preserves_explicit_pipeline_controls():
+    loader = _loader(
+        _ImageDataset(5),
+        2,
+        True,
+        9,
+        1,
+        True,
+        pin_memory=True,
+        prefetch_factor=3,
+    )
+    assert loader.num_workers == 1
+    assert loader.persistent_workers
+    assert loader.pin_memory
+    assert loader.prefetch_factor == 3
+
+
 def test_source_partitions_are_deterministic_complete_nonoverlapping_and_named():
     labels = np.tile(np.arange(10, dtype=np.int64), 100)
     eligible = np.arange(len(labels), dtype=np.int64)

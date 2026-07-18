@@ -70,3 +70,44 @@ def test_federated_shell_scripts_parse():
 
     for name in ("fedavg_single_gpu.sbatch", "submit_roihu_federated.sh"):
         subprocess.run(["bash", "-n", str(ROOT / "scripts/slurm" / name)], check=True)
+
+
+def test_distributed_array_uses_manifest_topology_and_mps_cleanup():
+    text = (ROOT / "scripts/slurm/federated_multigpu.sbatch").read_text()
+    assert "#SBATCH --partition=gpumedium" in text
+    assert "#SBATCH --nodes=1" in text and "#SBATCH --ntasks=1" in text
+    assert "#SBATCH --gres" not in text
+    assert "#SBATCH --time=36:00:00" in text
+    assert 'torchrun --standalone --nnodes=1 --nproc-per-node="${process_count}"' in text
+    assert "--resume-auto" in text
+    assert "srun torchrun" in text
+    assert "nvidia-cuda-mps-control -d" in text
+    assert "CUDA_MPS_PIPE_DIRECTORY" in text and "CUDA_MPS_LOG_DIRECTORY" in text
+    assert "100 / client_processes_per_device" in text
+    assert text.index("mps_started=1") < text.index("get_server_list")
+    assert "trap stop_execution_services EXIT" in text
+    assert "trap 'exit 130' INT" in text and "trap 'exit 143' TERM" in text
+    assert "printf 'quit\\n' | nvidia-cuda-mps-control" in text
+    assert '${SLURM_TMPDIR}/fedapfa_mps/${job_label}' in text
+
+
+def test_distributed_submission_groups_24_tasks_by_physical_device_count():
+    text = (ROOT / "scripts/slurm/submit_roihu_distributed_evaluation.sh").read_text()
+    assert "max_parallel=1" in text
+    assert "expected_task_count=24" in text and "expected_task_count=9" in text
+    assert "--datasets" in text and "--device-counts" in text and "--collection" in text
+    assert "device_capacity_evaluation" in text
+    assert '--gres="gpu:gh200:${device_count}"' in text
+    assert '--array="${indices[${device_count}]}%${max_parallel}"' in text
+    assert '--account="${CSC_PROJECT}"' in text
+    assert '/slurm-logs/${collection}' in text
+    assert "one_gpu_job_id=" in text
+    assert "two_gpu_job_id=" in text
+    assert "four_gpu_job_id=" in text
+
+
+def test_distributed_shell_scripts_parse():
+    import subprocess
+
+    for name in ("federated_multigpu.sbatch", "submit_roihu_distributed_evaluation.sh"):
+        subprocess.run(["bash", "-n", str(ROOT / "scripts/slurm" / name)], check=True)

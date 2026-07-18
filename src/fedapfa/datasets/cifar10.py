@@ -183,6 +183,28 @@ class FederatedCIFAR10Bundle:
     official_test_access_count: int = 0
     official_test_identity: dict | None = None
 
+    @property
+    def client_ids(self) -> list[str]:
+        return sorted(self.partition.client_indices)
+
+    @property
+    def aggregation_weighting(self) -> str:
+        return self.config["federated"]["aggregation_weighting"]
+
+    @property
+    def checkpoint_selection(self) -> str:
+        return self.config["federated"]["checkpoint_selection"]
+
+    @property
+    def evaluation_protocol(self) -> dict:
+        return {
+            "validation_collection": None,
+            "internal_validation_available": False,
+            "official_test_publication_collection_name": "validation",
+            "external_implementation_monitors_official_test": True,
+            "complete_standard_training_collection": len(self.train_indices) == 50000,
+        }
+
     def client_dataset(self, client_id: str) -> CIFAR10IndexedDataset:
         return CIFAR10IndexedDataset(
             self.training_base,
@@ -219,7 +241,7 @@ class FederatedCIFAR10Bundle:
         )
 
 
-def prepare_federated_cifar10(config: dict) -> FederatedCIFAR10Bundle:
+def prepare_federated_cifar10(config: dict, *, construct_validation: bool = True) -> FederatedCIFAR10Bundle:
     """Prepare the standard training split without opening the official test batch."""
 
     _torchvision()
@@ -269,7 +291,7 @@ def prepare_federated_cifar10(config: dict) -> FederatedCIFAR10Bundle:
         raise ValueError(f"unsupported CIFAR-10 partition method: {partition_config['method']}")
     validation = (
         CIFAR10IndexedDataset(base, validation_indices, config["dataset"]["transforms"], augment=False)
-        if len(validation_indices)
+        if construct_validation and len(validation_indices)
         else None
     )
     return FederatedCIFAR10Bundle(

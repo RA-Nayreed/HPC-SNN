@@ -1,0 +1,13 @@
+schema_version: 1
+collection: device_capacity_evaluation
+seeds_file: seeds.yaml
+experiments:
+  - id: shd_lif_fedavg_1_gpu_1_client_process
+    config: shd/lif_fedavg_1_gpu_1_client_process.yaml
+    mandatory: true
+  - id: shd_lif_fedavg_1_gpu_2_client_processes
+    config: shd/lif_fedavg_1_gpu_2_client_processes.yaml
+    mandatory: true
+  - id: shd_lif_fedavg_1_gpu_4_client_processes
+    config: shd/lif_fedavg_1_gpu_4_client_processes.yaml
+    mandatory: true

@@ -94,9 +94,73 @@ The array tests each requested `nvidia-smi` field, records unsupported fields ex
 
 This telemetry describes the allocated GPU job. It does not isolate individual client work, does not measure communication traffic, and must not be labelled per-client, neural-model, or neuromorphic energy. The committed federated evidence does not report device-utilization or energy estimates. Logical communication is tensor accounting rather than physical network measurement. Successful GH200 execution therefore does not demonstrate low-energy SNN operation or FPGA-equivalent or neuromorphic energy efficiency.
 
-## Corrected CIFAR-10 Fed-SNN execution and evidence
+## Single-node distributed FedAvg execution
 
-The corrected six-task execution completed successfully. The [Slurm accounting record](../../results/fedsnn_paper_evaluation/provenance/slurm-accounting.txt) contains tasks `236880_0` through `236880_5`, all `COMPLETED` with exit code `0:0`. Each task used one GH200, and every scientific execution reached round 100. CIFAR-10 was already present at `$WORK_DIR/data/cifar10`; neither launcher nor trainer downloaded it.
+The [distributed manifest](../../experiments/distributed_evaluation/manifest.yaml) contains 24 exclusive-device tasks: SHD and SSC each use one, two, and four GPUs; CIFAR-10 uses one and two GPUs; and all treatments use seeds 7, 17, and 27. CIFAR-10 has no four-GPU task because each round selects only two clients. `torchrun` starts one process per allocated GPU with NCCL. Each dataset’s one-GPU distributed path supplies its own paired timing and numerical reference.
+
+The wrapper groups manifest indices by physical-device count and submits separate arrays with one, two, or four GH200 GPUs. It does not reserve four GPUs for smaller treatments and does not alter task configurations. CPU cores scale as 72 per physical GPU. The 36-hour value is a task limit, not an observed duration.
+
+SHD, SSC, and CIFAR-10 data must already exist at `$WORK_DIR/data/shd`, `$WORK_DIR/data/ssc`, and `$WORK_DIR/data/cifar10`. Runs, summaries, telemetry, and Slurm logs stay below the matching `$WORK_DIR` subdirectories. The launcher does not download data.
+
+Validate and submit the 24-task matrix:
+
+~~~bash
+python3 -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/distributed_evaluation/manifest.yaml
+bash scripts/slurm/submit_roihu_distributed_evaluation.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
+  --datasets shd,ssc,cifar10 \
+  --device-counts 1,2,4 \
+  --max-parallel 1
+~~~
+
+The wrapper prints `one_gpu_job_id`, `two_gpu_job_id`, and `four_gpu_job_id` for groups containing selected tasks. `--datasets` and `--device-counts` may select subsets; requesting four GPUs never creates a CIFAR-10 treatment. `--max-parallel` controls concurrency within each separately allocated array group. Every task uses `--resume-auto`. Compatible interrupted execution resumes from rank 0’s `checkpoints/last.pt`; dataset or topology changes are incompatible.
+
+The separate [device-capacity collection](../../experiments/device_capacity_evaluation/manifest.yaml) defines unmeasured SHD configurations with two or four client processes on one physical GPU. These use Gloo for CPU control/state movement and CUDA MPS for local client work. The array script starts MPS only when `cuda_process_service: mps`, creates job-unique pipe and log directories below `SLURM_TMPDIR`, sets `floor(100 / client_processes_per_device)` as the active-thread percentage, verifies the daemon, and stops it on success, error, cancellation, interrupt, or termination. Logs are copied to the configured work directory. The percentage is a capacity control, not a guarantee of equal GPU time. No packing treatment is preferred before measurement.
+
+After separately deciding to collect device-capacity evidence, validate and submit that nine-task collection with:
+
+~~~bash
+python3 -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/device_capacity_evaluation/manifest.yaml
+bash scripts/slurm/submit_roihu_distributed_evaluation.sh \
+  --collection device_capacity_evaluation \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
+  --datasets shd \
+  --device-counts 1 \
+  --max-parallel 1
+~~~
+
+This command is operational documentation only; the collection has not been submitted or executed. Its one-process treatment supplies the same-path exclusive reference for the two- and four-process MPS capacity treatments.
+
+Monitor the returned job and capture allocation accounting:
+
+~~~bash
+squeue --job <ONE_JOB_ID>,<TWO_JOB_ID>,<FOUR_JOB_ID> --array \
+  -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+mkdir -p "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation"
+sacct -j <ONE_JOB_ID>,<TWO_JOB_ID>,<FOUR_JOB_ID> --array -X -P \
+  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES \
+  > "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation/slurm-accounting.txt"
+~~~
+
+After all 24 tasks pass completion checks:
+
+~~~bash
+fedapfa-summarize-distributed-evaluation \
+  --manifest experiments/distributed_evaluation/manifest.yaml \
+  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/distributed_evaluation" \
+  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation" \
+  --slurm-accounting "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation/slurm-accounting.txt"
+~~~
+
+The summarizer groups SHD, SSC, and CIFAR-10 separately, pairs each resource treatment with the same workload and seed on one GPU, and reports runtime, client wall time, aggregation, validation, allocated and reserved memory, utilization when present, load imbalance, speedup, efficiency, structural identity, and parameter-level numerical differences. Supply accounting rows for every array-task allocation used by a resumed run: allocated GPU-hours and elapsed allocation time are summed across that history, while the completing allocation must be `COMPLETED` with exit code `0:0`. The trainer reads the job telemetry path after scientific evaluation and stores finite sample counts plus aggregate and per-device utilization minima, means, and maxima. Execution movement, logical communication, Slurm allocation, device telemetry, and process busy time remain distinct.
+
+Ordinary executions leave PyTorch profiling disabled. Profiled configurations must name explicit communication rounds and write rank-specific traces; trace overhead means those rounds are not ordinary timing evidence. No distributed CUDA, NCCL, or MPS result is committed, and there is no speedup, utilization, numerical-equivalence, device-capacity, or energy claim yet.
+
+## CIFAR-10 Fed-SNN execution and evidence
+
+The six-task execution completed successfully. The [Slurm accounting record](../../results/fedsnn_paper_evaluation/provenance/slurm-accounting.txt) contains tasks `236880_0` through `236880_5`, all `COMPLETED` with exit code `0:0`. Each task used one GH200, and every scientific execution reached round 100. CIFAR-10 was already present at `$WORK_DIR/data/cifar10`; neither launcher nor trainer downloaded it.
 
 | Distribution | Seed accuracies | Mean ± sample SD | Paper reference | Mean signed difference |
 |---|---|---:|---:|---:|
@@ -105,7 +169,7 @@ The corrected six-task execution completed successfully. The [Slurm accounting r
 
 The [committed summary](../../results/fedsnn_paper_evaluation/published_fedsnn_summary.md) is the active operational reference. Its scientific status is `equivalence_not_established`. The IID-to-non-IID mean reduction is 8.0267 percentage points; this is descriptive and is not a statistical-significance or causal claim.
 
-Re-run the corrected federated matrix only when an independent execution is required:
+Re-run the federated matrix only when an independent execution is required:
 
 ~~~bash
 bash scripts/slurm/submit_roihu_published_fedsnn.sh \

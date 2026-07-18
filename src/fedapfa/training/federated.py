@@ -1,4 +1,4 @@
-"""Single-device orchestration for the SHD FedAvg scientific reference."""
+"""Single-device synchronous FedAvg scientific orchestration."""
 
 from __future__ import annotations
 
@@ -40,21 +40,39 @@ def make_initialized_federated_model(config: dict):
     python_state = random.getstate()
     numpy_state = np.random.get_state()
     torch_state = torch.get_rng_state()
-    cuda_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    distributed_execution = "parallel_execution" in config
+    distributed_cuda = torch.cuda.is_available() and distributed_execution
+    cuda_device = (
+        torch.device("cuda", torch.cuda.current_device()) if distributed_cuda else None
+    )
+    cuda_state = (
+        torch.cuda.get_rng_state(cuda_device)
+        if cuda_device is not None
+        else torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+    )
     seed = seeds["model_initialization"]
     random.seed(seed)
     np.random.seed(seed % (2**32))
-    torch.manual_seed(seed)
+    if distributed_execution:
+        torch.set_rng_state(torch.Generator().manual_seed(seed).get_state())
+    else:
+        torch.manual_seed(seed)
     if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
+        if distributed_cuda:
+            torch.cuda.manual_seed(seed)
+        else:
+            torch.cuda.manual_seed_all(seed)
     try:
         model = make_model(config)
     finally:
         random.setstate(python_state)
         np.random.set_state(numpy_state)
         torch.set_rng_state(torch_state)
-        if cuda_state is not None and torch.cuda.is_available():
-            torch.cuda.set_rng_state_all(cuda_state)
+        if cuda_state is not None:
+            if cuda_device is not None:
+                torch.cuda.set_rng_state(cuda_state, cuda_device)
+            else:
+                torch.cuda.set_rng_state_all(cuda_state)
     return model
 
 

@@ -1,3 +1,14 @@
+from .distributed_evaluation import (
+    DISTRIBUTED_DEVICE_COUNTS,
+    distributed_execution_identity,
+    distributed_scientific_identity,
+    load_device_capacity_manifest,
+    load_distributed_evaluation_config,
+    load_distributed_evaluation_manifest,
+    process_device_mapping,
+    validate_distributed_evaluation_config,
+    validate_parallel_execution,
+)
 from .experiment_id import expand_sweep, experiment_id
 from .federated_manifest import FEDERATED_SEEDS, load_federated_config, load_federated_manifest
 from .federated_validation import paired_configuration_identity, validate_federated_config
@@ -18,9 +29,15 @@ __all__ = [
     "load_heterogeneity_manifest",
     "load_published_fedsnn_manifest",
     "FEDERATED_SEEDS",
+    "DISTRIBUTED_DEVICE_COUNTS",
+    "distributed_execution_identity",
+    "distributed_scientific_identity",
     "load_centralized_manifest",
     "load_federated_config",
     "load_federated_manifest",
+    "load_distributed_evaluation_config",
+    "load_distributed_evaluation_manifest",
+    "load_device_capacity_manifest",
     "ConfigurationError",
     "experiment_id",
     "expand_sweep",
@@ -29,4 +46,7 @@ __all__ = [
     "paired_configuration_identity",
     "validate_config",
     "validate_federated_config",
+    "validate_distributed_evaluation_config",
+    "validate_parallel_execution",
+    "process_device_mapping",
 ]

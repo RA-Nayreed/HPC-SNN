@@ -142,7 +142,7 @@ def validate_config(config: Mapping[str, Any]) -> None:
             "weight_initialization": "xavier_uniform_gain_2",
         }
         if any(model.get(key) != value for key, value in expected_model.items()):
-            raise ConfigurationError("centralized corrected S-VGG9 BNTT settings are incompatible")
+            raise ConfigurationError("centralized paper-reported S-VGG9 BNTT settings are incompatible")
     else:
         if not isinstance(hidden, list) or len(hidden) != 2 or any(not isinstance(v, int) or v <= 0 for v in hidden):
             raise ConfigurationError("model.hidden_dims must contain two positive integers")

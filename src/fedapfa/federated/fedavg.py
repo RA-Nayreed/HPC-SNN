@@ -19,6 +19,12 @@ def aggregate_client_results(
     """Aggregate client states and calculate alignment while updates are resident."""
 
     before = clone_state_dict(model.state_dict())
+    if results:
+        result_device = next(iter(results[0].state_dict.values())).device
+        if any(value.device != result_device for result in results for value in result.state_dict.values()):
+            raise ValueError("client result states must reside on one common device")
+        if next(iter(before.values())).device != result_device:
+            before = {name: value.to(result_device) for name, value in before.items()}
     aggregated, weights = weighted_fedavg(
         [
             AggregationInput(

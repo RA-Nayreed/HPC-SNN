@@ -1,0 +1,24 @@
+include:
+  - ../../federated_baselines/shd/lif_dirichlet_alpha_0_5_participation_0_50.yaml
+output_root: runs/distributed_evaluation
+pairing_group: shd_lif_fedavg_distributed_evaluation
+parallel_execution:
+  node_count: 1
+  client_processes_per_device: 1
+  control_backend: nccl
+  cuda_process_service: none
+  client_assignment: selected_order_round_robin
+  aggregation_order: selected_client_order
+  synchronize_each_round: true
+execution_measurement:
+  profiler_enabled: false
+  profiled_rounds: []
+  record_cuda_memory: true
+  record_device_utilization: true
+  utilization_interval_seconds: 2
+federated:
+  pin_memory: false
+  prefetch_factor: 2
+  non_blocking_transfer: true
+metadata:
+  purpose: distributed_evaluation
