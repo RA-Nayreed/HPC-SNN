@@ -30,11 +30,26 @@ module purge
 module load python-pytorch/2.10
 venv="${FEDAPFA_VENV:-/projappl/${CSC_PROJECT}/${USER}/hpc-snn-venv}"
 [[ -f "${venv}/bin/activate" ]] || { echo "missing Roihu virtual environment: ${venv}" >&2; exit 2; }
+python_bin="${venv}/bin/python3"
+[[ -x "${python_bin}" ]] || { echo "project Python interpreter is not executable: ${python_bin}" >&2; exit 2; }
 source "${venv}/bin/activate"
 cd "${REPO_ROOT}"
 
-python3 -m fedapfa.cli.scientific_manifest validate --manifest "${DISTRIBUTED_MANIFEST}"
-task="$(python3 -m fedapfa.cli.scientific_manifest task \
+"${python_bin}" - <<'PY'
+import sys
+
+import fedapfa
+import torch
+
+print(f"python_executable={sys.executable}")
+print(f"torch_location={torch.__file__}")
+print(f"fedapfa_location={fedapfa.__file__}")
+print(f"torch_cuda_build={torch.version.cuda}")
+print(f"cuda_visible={torch.cuda.is_available()}")
+PY
+
+"${python_bin}" -m fedapfa.cli.scientific_manifest validate --manifest "${DISTRIBUTED_MANIFEST}"
+task="$("${python_bin}" -m fedapfa.cli.scientific_manifest task \
     --manifest "${DISTRIBUTED_MANIFEST}" --index "${SLURM_ARRAY_TASK_ID}")"
 IFS=$'\t' read -r config seed dataset mode protocol experiment participation device_count \
     client_processes_per_device process_count control_backend cuda_process_service configured_output_root <<< "${task}"
@@ -45,7 +60,7 @@ IFS=$'\t' read -r config seed dataset mode protocol experiment participation dev
     echo "task process topology is incompatible" >&2; exit 2;
 }
 
-allocated_devices="$(python3 - <<'PY'
+allocated_devices="$("${python_bin}" - <<'PY'
 import torch
 if not torch.cuda.is_available():
     raise SystemExit("CUDA is unavailable; distributed execution requires GH200 GPUs")
@@ -119,9 +134,11 @@ if [[ "${cuda_process_service}" == "mps" ]]; then
     [[ "${control_backend}" == "gloo" && "${client_processes_per_device}" -gt 1 ]] || {
         echo "MPS execution requires Gloo and multiple client processes per device" >&2; exit 2;
     }
-    : "${SLURM_TMPDIR:?MPS execution requires the Slurm job-local directory}"
+    : "${TMPDIR:?MPS execution requires Roihu TMPDIR as the job-local directory}"
+    [[ -d "${TMPDIR}" ]] || { echo "Roihu TMPDIR is not an existing directory: ${TMPDIR}" >&2; exit 2; }
+    [[ -w "${TMPDIR}" ]] || { echo "Roihu TMPDIR is not writable: ${TMPDIR}" >&2; exit 2; }
     command -v nvidia-cuda-mps-control >/dev/null || { echo "CUDA MPS control command is unavailable" >&2; exit 2; }
-    mps_job_root="${SLURM_TMPDIR}/fedapfa_mps/${job_label}"
+    mps_job_root="${TMPDIR}/fedapfa_mps/${job_label}"
     export CUDA_MPS_PIPE_DIRECTORY="${mps_job_root}/pipe"
     export CUDA_MPS_LOG_DIRECTORY="${mps_job_root}/log"
     mkdir -p "${CUDA_MPS_PIPE_DIRECTORY}" "${CUDA_MPS_LOG_DIRECTORY}"
@@ -142,6 +159,9 @@ export OMP_NUM_THREADS="$((SLURM_CPUS_PER_TASK / process_count))"
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 export NCCL_ASYNC_ERROR_HANDLING=1
 echo "array=${SLURM_ARRAY_TASK_ID} experiment=${experiment} seed=${seed} dataset=${dataset} devices=${device_count} processes=${process_count} service=${cuda_process_service}"
-srun torchrun --standalone --nnodes=1 --nproc-per-node="${process_count}" \
+srun "${python_bin}" -m torch.distributed.run \
+    --standalone \
+    --nnodes=1 \
+    --nproc-per-node="${process_count}" \
     -m fedapfa.cli.train_federated_distributed "${config}" \
     --seed "${seed}" --data-root "${data_root}" --output-root "${runs_root}" --resume-auto

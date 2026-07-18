@@ -78,9 +78,21 @@ def test_distributed_array_uses_manifest_topology_and_mps_cleanup():
     assert "#SBATCH --nodes=1" in text and "#SBATCH --ntasks=1" in text
     assert "#SBATCH --gres" not in text
     assert "#SBATCH --time=36:00:00" in text
-    assert 'torchrun --standalone --nnodes=1 --nproc-per-node="${process_count}"' in text
+    assert 'python_bin="${venv}/bin/python3"' in text
+    assert '[[ -x "${python_bin}" ]]' in text
+    assert '"${python_bin}" -m fedapfa.cli.scientific_manifest validate' in text
+    assert 'task="$("${python_bin}" -m fedapfa.cli.scientific_manifest task' in text
+    assert 'allocated_devices="$("${python_bin}" - <<\'PY\'' in text
+    assert "import torch" in text and "import fedapfa" in text
+    assert "python_executable=" in text
+    assert "torch_location=" in text and "fedapfa_location=" in text
+    assert "torch_cuda_build=" in text and "cuda_visible=" in text
+    assert 'srun "${python_bin}" -m torch.distributed.run' in text
+    assert '--nproc-per-node="${process_count}"' in text
+    assert "srun torchrun" not in text
+    assert '-m fedapfa.cli.train_federated_distributed "${config}"' in text
+    assert '--seed "${seed}" --data-root "${data_root}" --output-root "${runs_root}" --resume-auto' in text
     assert "--resume-auto" in text
-    assert "srun torchrun" in text
     assert "nvidia-cuda-mps-control -d" in text
     assert "CUDA_MPS_PIPE_DIRECTORY" in text and "CUDA_MPS_LOG_DIRECTORY" in text
     assert "100 / client_processes_per_device" in text
@@ -88,7 +100,11 @@ def test_distributed_array_uses_manifest_topology_and_mps_cleanup():
     assert "trap stop_execution_services EXIT" in text
     assert "trap 'exit 130' INT" in text and "trap 'exit 143' TERM" in text
     assert "printf 'quit\\n' | nvidia-cuda-mps-control" in text
-    assert '${SLURM_TMPDIR}/fedapfa_mps/${job_label}' in text
+    assert ': "${TMPDIR:?MPS execution requires Roihu TMPDIR as the job-local directory}"' in text
+    assert '[[ -d "${TMPDIR}" ]]' in text
+    assert '[[ -w "${TMPDIR}" ]]' in text
+    assert '${TMPDIR}/fedapfa_mps/${job_label}' in text
+    assert "SLURM_TMPDIR" not in text
 
 
 def test_distributed_submission_groups_24_tasks_by_physical_device_count():
