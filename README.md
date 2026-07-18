@@ -99,9 +99,18 @@ All six executions passed completion checks. Their scientific status is `not_cla
 
 ## Corrected CIFAR-10 Fed-SNN protocols
 
-The active Fed-SNN manifest represents the two CIFAR-10 SNN 10/2 rows in Table I: an IID evaluation with descriptive reference 76.44% and a non-IID alpha-0.5 evaluation with descriptive reference 73.94%. Distribution is the only intended treatment difference. Both use all 50,000 standard training examples, five local epochs, momentum 0.95, source-default weight decay `1e-4`, and final-round selection without internal validation or official-test monitoring. Seeds 7, 17, and 27 produce exactly six tasks.
+The active Fed-SNN evidence covers the two CIFAR-10 SNN 10/2 rows in Table I. Distribution is the only intended treatment difference: IID versus balanced label-Dirichlet non-IID with alpha 0.5. Both treatments use all 50,000 standard training examples, no internal validation collection, ten total clients, two selected clients, five local epochs, 20 timesteps, momentum 0.95, weight decay `1e-4`, uniform aggregation, and final-round selection. The official 10,000-example test collection is evaluated once after round 100.
 
-Both treatments use signed `[-1,1]` input, signed Poisson spikes, 20-timestep S-VGG9 BNTT with temporal-mean readout, Xavier gain-2 initialization, BNTT epsilon `1e-4`, dropped local remainders, and uniform selected-client aggregation. The reference values are descriptive, have no acceptance tolerance, and cannot trigger a reproduction pass. Corrected accuracy values will not be published here until compatible executions exist. The earlier 18.23–26.79% executions are retained as a computationally complete but scientifically incompatible independent implementation and are absent from the active manifest.
+All six executions for seeds 7, 17, and 27 completed successfully:
+
+| Distribution | Seed 7 | Seed 17 | Seed 27 | Mean ± sample SD | Mean macro-F1 | Paper reference | Mean signed difference |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| IID | 81.50% | 82.16% | 81.55% | 81.7367% ± 0.3675 pp | 81.7070% | 76.44% | +5.2967 pp |
+| Label-Dirichlet non-IID, alpha 0.5 | 72.01% | 75.80% | 73.32% | 73.7100% ± 1.9249 pp | 73.5136% | 73.94% | -0.2300 pp |
+
+The [committed corrected summary](results/fedsnn_paper_evaluation/published_fedsnn_summary.md) is the active Fed-SNN reference. The corrected implementation learns successfully; the non-IID mean closely agrees with the descriptive paper value, while the stable IID mean is about 5.30 percentage points higher. The IID-to-non-IID mean reduction is 8.0267 percentage points. Macro-F1 closely follows accuracy and provides no evidence of class collapse. These are descriptive three-seed results, not evidence of statistical significance, causality, novelty, energy efficiency, implementation equivalence, or an exact reproduction pass. Scientific status remains `equivalence_not_established`.
+
+Both treatments retain signed `[-1,1]` input, signed Poisson spikes, 20-timestep S-VGG9 BNTT with temporal-mean readout, Xavier gain-2 initialization, BNTT epsilon `1e-4`, dropped local remainders, and uniform selected-client aggregation. The earlier 18.23–26.79% evidence remains byte-for-byte preserved as an unsuccessful superseded independent implementation; it is excluded from the active manifest and is never pooled with the corrected evidence.
 
 Validate the two federated configurations, centralized verification, and manifest:
 
@@ -113,7 +122,7 @@ python3 -m fedapfa.cli.scientific_manifest validate \
   --manifest experiments/published_fedsnn/manifest.yaml
 ~~~
 
-Submit the six corrected federated tasks on Roihu:
+Re-run the six corrected federated tasks on Roihu when an independent execution is required:
 
 ~~~bash
 bash scripts/slurm/submit_roihu_published_fedsnn.sh \

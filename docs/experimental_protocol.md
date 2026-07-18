@@ -101,8 +101,21 @@ The paper’s 76.44% IID and 73.94% non-IID values are descriptive only. No tole
 
 Remaining discrepancies include the paper’s example-count aggregation equation versus released `Fed.py` uniform aggregation, omitted paper values for timesteps and SNN weight decay, released-source official-test monitoring versus one final project evaluation, and the project training selected clients only while the authors compute every client update before choosing uploaded states.
 
+### Collected corrected evidence
+
+All six mandatory executions completed successfully for seeds 7, 17, and 27. Every run selected round 100, used all 50,000 training examples with zero internal-validation examples, and accessed the complete 10,000-example official test collection exactly once after training.
+
+| Distribution | Seed 7 | Seed 17 | Seed 27 | Mean ± sample SD | Mean macro-F1 | Paper reference | Mean signed difference |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| IID | 81.50% | 82.16% | 81.55% | 81.7367% ± 0.3675 pp | 81.7070% | 76.44% | +5.2967 pp |
+| Label-Dirichlet non-IID, alpha 0.5 | 72.01% | 75.80% | 73.32% | 73.7100% ± 1.9249 pp | 73.5136% | 73.94% | -0.2300 pp |
+
+The [generated summary](../results/fedsnn_paper_evaluation/published_fedsnn_summary.md) is the active Fed-SNN evidence. The corrected implementation learns successfully. The non-IID mean closely agrees with the paper’s descriptive value, while the IID mean exceeds its reference by 5.2967 percentage points. The descriptive IID-to-non-IID reduction is 8.0267 percentage points. Macro-F1 tracks accuracy closely and supplies no evidence of class collapse.
+
+These three-seed observations do not establish statistical significance, causality, novelty, energy efficiency, exact source equivalence, or an exact reproduction pass. Scientific status remains `equivalence_not_established`.
+
 The earlier CIFAR-10 implementation completed with 18.23–26.79% official-test accuracy but used an incompatible representation, encoder, readout, initialization, timestep count, BNTT epsilon, loader rule, partition, and aggregation rule. Its configuration is retained outside the active manifest, and its generated evidence is unchanged.
 
 ## Centralized CIFAR-10 learning verification
 
-`experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml` uses the corrected data representation and S-VGG9 model with a distinct `runs/fedsnn_centralized_verification` identity. It fits the 45,000-example training subset, selects by the 5,000-example validation subset, and evaluates the official test once. This configuration is intended to verify learning before any corrected federated execution; it is not part of the six-task federated manifest and has not been executed as part of this correction.
+`experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml` uses the corrected data representation and S-VGG9 model with a distinct `runs/fedsnn_centralized_verification` identity. It fits the 45,000-example training subset, selects by the 5,000-example validation subset, and evaluates the official test once. This configuration remains an independent model-learning check and is not part of the six-task federated manifest. The completed federated evidence above independently demonstrates that the corrected implementation learns under the declared Table I protocol.

@@ -94,11 +94,18 @@ The array tests each requested `nvidia-smi` field, records unsupported fields ex
 
 This telemetry describes the allocated GPU job. It does not isolate individual client work, does not measure communication traffic, and must not be labelled per-client, neural-model, or neuromorphic energy. The committed federated evidence does not report device-utilization or energy estimates. Logical communication is tensor accounting rather than physical network measurement. Successful GH200 execution therefore does not demonstrate low-energy SNN operation or FPGA-equivalent or neuromorphic energy efficiency.
 
-## Corrected CIFAR-10 Fed-SNN execution
+## Corrected CIFAR-10 Fed-SNN execution and evidence
 
-The corrected array contains six tasks, reserves one GH200 per task, uses `gpumedium`, and remains within the 36-hour limit. Maximum simultaneous tasks remain user-controlled. CIFAR-10 must already exist at `$WORK_DIR/data/cifar10`; neither launcher nor trainer downloads it.
+The corrected six-task execution completed successfully. The [Slurm accounting record](../../results/fedsnn_paper_evaluation/provenance/slurm-accounting.txt) contains tasks `236880_0` through `236880_5`, all `COMPLETED` with exit code `0:0`. Each task used one GH200, and every scientific execution reached round 100. CIFAR-10 was already present at `$WORK_DIR/data/cifar10`; neither launcher nor trainer downloaded it.
 
-Submit the corrected federated matrix:
+| Distribution | Seed accuracies | Mean ± sample SD | Paper reference | Mean signed difference |
+|---|---|---:|---:|---:|
+| IID | 81.50%, 82.16%, 81.55% | 81.7367% ± 0.3675 pp | 76.44% | +5.2967 pp |
+| Label-Dirichlet non-IID, alpha 0.5 | 72.01%, 75.80%, 73.32% | 73.7100% ± 1.9249 pp | 73.94% | -0.2300 pp |
+
+The [committed summary](../../results/fedsnn_paper_evaluation/published_fedsnn_summary.md) is the active operational reference. Its scientific status is `equivalence_not_established`. The IID-to-non-IID mean reduction is 8.0267 percentage points; this is descriptive and is not a statistical-significance or causal claim.
+
+Re-run the corrected federated matrix only when an independent execution is required:
 
 ~~~bash
 bash scripts/slurm/submit_roihu_published_fedsnn.sh \
@@ -116,7 +123,7 @@ sacct -j <JOB_ID> --array \
   --format=JobID,State,ExitCode,Elapsed,Start,End,AllocTRES
 ~~~
 
-Summarize only after the six corrected tasks exist:
+Regenerate the summary from a complete compatible six-run collection with:
 
 ~~~bash
 fedapfa-summarize-published-fedsnn \
@@ -125,7 +132,7 @@ fedapfa-summarize-published-fedsnn \
   --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/fedsnn_paper_evaluation"
 ~~~
 
-Before another federated execution, run the centralized learning verification from a one-GPU Roihu allocation after loading `python-pytorch/2.10` and activating the established environment:
+The centralized learning verification remains available as a separate check from a one-GPU Roihu allocation after loading `python-pytorch/2.10` and activating the established environment:
 
 ~~~bash
 python3 -m fedapfa.cli.train_centralized \
@@ -135,4 +142,4 @@ python3 -m fedapfa.cli.train_centralized \
   --device cuda --resume-auto
 ~~~
 
-The centralized command is documented but was not run or submitted during the correction.
+The centralized configuration is separate from the completed six-task Fed-SNN evidence and must not be pooled with it.

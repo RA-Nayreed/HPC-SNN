@@ -84,6 +84,17 @@ The released `test_cifar10.sh` example remains useful source evidence: it reques
 
 Table I reports 76.44% for the CIFAR-10 SNN 10/2 IID setting and 73.94% for its non-IID setting. Both are stored only as descriptive references. Neither has a tolerance or can trigger acceptance. Reports calculate signed and absolute percentage-point differences while retaining scientific status `equivalence_not_established`.
 
+The committed [corrected summary](../../results/fedsnn_paper_evaluation/published_fedsnn_summary.md) records all six executions as complete:
+
+| Distribution | Seed 7 | Seed 17 | Seed 27 | Mean ± sample SD | Paper reference | Mean signed difference |
+|---|---:|---:|---:|---:|---:|---:|
+| IID | 81.50% | 82.16% | 81.55% | 81.7367% ± 0.3675 pp | 76.44% | +5.2967 pp |
+| Label-Dirichlet non-IID, alpha 0.5 | 72.01% | 75.80% | 73.32% | 73.7100% ± 1.9249 pp | 73.94% | -0.2300 pp |
+
+Mean macro-F1 is 81.7070% for IID and 73.5136% for non-IID, closely following accuracy and providing no evidence of class collapse. The corrected implementation therefore learns successfully. The non-IID mean closely agrees with the paper’s descriptive value, whereas the IID mean is stable across the three seeds but exceeds its reference by about 5.30 percentage points. The descriptive IID-to-non-IID reduction is 8.0267 percentage points.
+
+This is strong protocol-aligned validation, not established implementation equivalence or an exact reproduction pass. Three seeds do not support a statistical-significance claim. The evidence also does not support novelty, causality, or energy-efficiency claims, and the paper/source discrepancies above remain unresolved.
+
 The prior independent implementation completed computationally and produced 18.23–26.79% official-test accuracy. It was scientifically incompatible because it used unit-interval inputs, crop and flip augmentation, unsigned Poisson encoding, a summed readout, default initialization, 25 timesteps, BNTT epsilon `1e-5`, retained incomplete local batches, unbalanced Dirichlet sampling, and example-count aggregation. Its configuration remains under `experiments/published_fedsnn/history`, and its generated runs remain under `runs/published_fedsnn` without modification.
 
-Corrected experiment names and the `runs/fedsnn_paper_evaluation` root prevent automatic resumption from loading prior unsuccessful checkpoints or the superseded, unexecuted released-command identity. Checkpoint compatibility also hashes the resolved aggregation and selection policies and verifies them explicitly.
+The corrected `fedsnn_paper_evaluation` evidence is the active Fed-SNN reference. The unsuccessful prior evidence remains byte-for-byte preserved, is not pooled or averaged with the corrected runs, and must not be presented as the active baseline. Corrected experiment names and the `runs/fedsnn_paper_evaluation` root prevent automatic resumption from loading prior unsuccessful checkpoints or the superseded, unexecuted released-command identity. Checkpoint compatibility also hashes the resolved aggregation and selection policies and verifies them explicitly.
