@@ -96,67 +96,50 @@ This telemetry describes the allocated GPU job. It does not isolate individual c
 
 ## Single-node distributed FedAvg execution
 
-The [distributed manifest](../../experiments/distributed_evaluation/manifest.yaml) contains 24 exclusive-device tasks: SHD and SSC each use one, two, and four GPUs; CIFAR-10 uses one and two GPUs; and all treatments use seeds 7, 17, and 27. CIFAR-10 has no four-GPU task because each round selects only two clients. `torchrun` starts one process per allocated GPU with NCCL. Each dataset’s one-GPU distributed path supplies its own paired timing and numerical reference.
+The completed [physical-device collection](../../results/distributed_evaluation/distributed_evaluation_summary.md) used arrays `250928`, `250929`, and `250946`; the completed [one-GPU capacity collection](../../results/device_capacity_evaluation/distributed_evaluation_summary.md) used array `250950`. All 33 tasks were `COMPLETED` with exit code `0:0` at execution commit `4491078710d01d22e9517e62c8de0f3554c4b3f2`.
 
-The wrapper groups manifest indices by physical-device count and submits separate arrays with one, two, or four GH200 GPUs. It does not reserve four GPUs for smaller treatments and does not alter task configurations. CPU cores scale as 72 per physical GPU. The 36-hour value is a task limit, not an observed duration.
+### Allocation layouts
 
-SHD, SSC, and CIFAR-10 data must already exist at `$WORK_DIR/data/shd`, `$WORK_DIR/data/ssc`, and `$WORK_DIR/data/cifar10`. Runs, summaries, telemetry, and Slurm logs stay below the matching `$WORK_DIR` subdirectories. The launcher does not download data.
+The authoritative comparisons used one process per physical GH200 and NCCL:
 
-Validate and submit the 24-task matrix:
+| Physical GH200 GPUs | Distributed processes | CPU cores | Slurm memory | Recorded `gres` |
+|---:|---:|---:|---:|---|
+| 1 | 1 | 72 | 217086M | `gpu:gh200=1` |
+| 2 | 2 | 144 | 434172M | `gpu:gh200=2` |
+| 4 | 4 | 288 | 868344M | `gpu:gh200=4` |
 
-~~~bash
-python3 -m fedapfa.cli.scientific_manifest validate \
-  --manifest experiments/distributed_evaluation/manifest.yaml
-bash scripts/slurm/submit_roihu_distributed_evaluation.sh \
-  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
-  --datasets shd,ssc,cifar10 \
-  --device-counts 1,2,4 \
-  --max-parallel 1
-~~~
+The capacity treatment reserved one physical GH200 and 72 CPU cores, then ran one, two, or four client processes. The one-process row used NCCL without a CUDA process service. The two- and four-process rows used Gloo for CPU control and detached state movement plus CUDA MPS for GPU work. Those rows measure one-GPU process capacity and remain separate from authoritative scientific-accuracy comparisons.
 
-The wrapper prints `one_gpu_job_id`, `two_gpu_job_id`, and `four_gpu_job_id` for groups containing selected tasks. `--datasets` and `--device-counts` may select subsets; requesting four GPUs never creates a CIFAR-10 treatment. `--max-parallel` controls concurrency within each separately allocated array group. Every task uses `--resume-auto`. Compatible interrupted execution resumes from rank 0’s `checkpoints/last.pt`; dataset or topology changes are incompatible.
+The launcher requires Roihu's writable job-local `TMPDIR` for MPS. It creates `CUDA_MPS_PIPE_DIRECTORY` and `CUDA_MPS_LOG_DIRECTORY` below `$TMPDIR/fedapfa_mps/<array_task>`, sets the active-thread percentage to integer `100 / client_processes_per_device`, verifies the MPS daemon, and archives logs under `$WORK_DIR/mps-logs/device_capacity_evaluation`. MPS pipes and daemon logs must not be placed in a shared repository or scratch path.
 
-The separate [device-capacity collection](../../experiments/device_capacity_evaluation/manifest.yaml) defines unmeasured SHD configurations with two or four client processes on one physical GPU. These use Gloo for CPU control/state movement and CUDA MPS for local client work. The array script starts MPS only when `cuda_process_service: mps`, creates job-unique pipe and log directories below `SLURM_TMPDIR`, sets `floor(100 / client_processes_per_device)` as the active-thread percentage, verifies the daemon, and stops it on success, error, cancellation, interrupt, or termination. Logs are copied to the configured work directory. The percentage is a capacity control, not a guarantee of equal GPU time. No packing treatment is preferred before measurement.
+### Python and distributed launcher
 
-After separately deciding to collect device-capacity evidence, validate and submit that nine-task collection with:
+The project interpreter is mandatory:
 
-~~~bash
-python3 -m fedapfa.cli.scientific_manifest validate \
-  --manifest experiments/device_capacity_evaluation/manifest.yaml
-bash scripts/slurm/submit_roihu_distributed_evaluation.sh \
-  --collection device_capacity_evaluation \
-  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
-  --datasets shd \
-  --device-counts 1 \
-  --max-parallel 1
-~~~
+    /projappl/$CSC_PROJECT/$USER/hpc-snn-venv/bin/python3
 
-This command is operational documentation only; the collection has not been submitted or executed. Its one-process treatment supplies the same-path exclusive reference for the two- and four-process MPS capacity treatments.
+The batch script loads `python-pytorch/2.10`, activates the project environment, verifies the locations of PyTorch and `fedapfa`, and launches:
 
-Monitor the returned job and capture allocation accounting:
+    "$FEDAPFA_VENV/bin/python3" -m torch.distributed.run
 
-~~~bash
-squeue --job <ONE_JOB_ID>,<TWO_JOB_ID>,<FOUR_JOB_ID> --array \
-  -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
-mkdir -p "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation"
-sacct -j <ONE_JOB_ID>,<TWO_JOB_ID>,<FOUR_JOB_ID> --array -X -P \
-  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES \
-  > "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation/slurm-accounting.txt"
-~~~
+Calling the module-provided `torchrun` executable directly is incompatible with this project environment because that executable's interpreter path belongs to the module installation. Activating the project environment does not rewrite its interpreter path, so workers are not guaranteed to import the project installation and its dependency set. Invoking `torch.distributed.run` through the project Python keeps the launcher and workers on the required interpreter.
 
-After all 24 tasks pass completion checks:
+### Scheduler association limit
 
-~~~bash
-fedapfa-summarize-distributed-evaluation \
-  --manifest experiments/distributed_evaluation/manifest.yaml \
-  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/distributed_evaluation" \
-  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation" \
-  --slurm-accounting "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation/slurm-accounting.txt"
-~~~
+The execution campaign observed a 40-GPU association limit. When the association already held that aggregate number of GH200 resources, further jobs remained pending with reason `AssocGrpGRES`. This reason means that the Slurm association group's generic-resource allocation limit is currently reached; it is not a task failure. A pending request has not begun allocated execution and is not execution billing. The scheduler can release it when association usage falls below the limit.
 
-The summarizer groups SHD, SSC, and CIFAR-10 separately, pairs each resource treatment with the same workload and seed on one GPU, and reports runtime, client wall time, aggregation, validation, allocated and reserved memory, utilization when present, load imbalance, speedup, efficiency, structural identity, and parameter-level numerical differences. Supply accounting rows for every array-task allocation used by a resumed run: allocated GPU-hours and elapsed allocation time are summed across that history, while the completing allocation must be `COMPLETED` with exit code `0:0`. The trainer reads the job telemetry path after scientific evaluation and stores finite sample counts plus aggregate and per-device utilization minima, means, and maxima. Execution movement, logical communication, Slurm allocation, device telemetry, and process busy time remain distinct.
+### Resource terms
 
-Ordinary executions leave PyTorch profiling disabled. Profiled configurations must name explicit communication rounds and write rank-specific traces; trace overhead means those rounds are not ordinary timing evidence. No distributed CUDA, NCCL, or MPS result is committed, and there is no speedup, utilization, numerical-equivalence, device-capacity, or energy claim yet.
+- A **physical GPU** is one allocated GH200 accelerator recorded as `gres/gpu:gh200`; it is not the same as a distributed process.
+- A **process** is a PyTorch distributed rank. Exclusive runs use one rank per GPU, whereas capacity runs place two or four ranks on one GPU through MPS.
+- **CPU cores** are Grace CPU cores attached to the allocation. The records contain 72 cores per physical GH200; process count does not change that allocation.
+- **GPU HBM** is accelerator memory, approximately 96 GiB visible on these GH200 GPUs. It is distinct from per-process allocated tensors and reserved CUDA memory.
+- **Grace memory** is CPU memory associated with the Grace component, described by Roihu as 120 GiB per reserved GH200.
+- **Slurm memory** is the scheduler allocation shown above. The one-GPU value of 217086M is not GPU HBM and must not be reported as such.
+
+Allocated tensor peaks, reserved CUDA peaks, device HBM, Grace CPU memory, and Slurm memory answer different questions. Likewise, round runtime, Slurm elapsed execution time, pending time, allocated GPU-hours, utilization, and energy are separate quantities. The committed accounting includes execution time only; the two-second utilization telemetry is not a direct energy measurement.
+
+Exact submission, monitoring, accounting transformation, summary generation, and evidence-verification commands are in the [reproducibility guide](../../docs/reproducibility.md#completed-distributed-execution-reproduction). Scientific interpretation and limitations are in the [distributed record](../../thesis_records/distributed_execution.md).
 
 ## CIFAR-10 Fed-SNN execution and evidence
 

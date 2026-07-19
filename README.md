@@ -99,43 +99,28 @@ All six executions passed completion checks. Their scientific status is `not_cla
 
 ## Single-node distributed FedAvg evaluation
 
-The canonical [manifest](experiments/distributed_evaluation/manifest.yaml) contains 24 exclusive-device tasks: SHD and SSC each use one, two, and four GPUs, CIFAR-10 uses one and two GPUs, and every treatment uses seeds 7, 17, and 27. CIFAR-10 has no four-GPU treatment because only two clients participate in each round. Configuration composition defines each workload once, and GPU-count treatments change execution placement only.
+The completed evaluation is recorded in the committed [physical-GPU result collection](results/distributed_evaluation/distributed_evaluation_summary.md), the separate [one-GPU capacity collection](results/device_capacity_evaluation/distributed_evaluation_summary.md), and the [distributed scientific record](thesis_records/distributed_execution.md). Both collections are `valid`: all 33 tasks passed their declared consistency gates. Results are means ± sample standard deviations over paired seeds 7, 17, and 27; datasets are not pooled.
 
-SHD retains the established 256/256 LIF 20/10 FedAvg protocol, derived validation split, example-count aggregation, and best-validation selection. SSC uses the complete 75,466-example official training collection for 20-client alpha-0.5 partitioning, the official 9,981-example validation collection for selection, the 128/128 LIF model and 256-example local batch recorded by the centralized SSC reference, and the official 20,382-example test collection once afterward. SSC is an independent evaluation with no literature target. CIFAR-10 reuses the active non-IID alpha-0.5 S-VGG9 BNTT configuration, selects two of ten clients, uses uniform aggregation, has no internal validation, selects round 100, and evaluates the official test once afterward.
+| Workload | Physical GPUs | Test accuracy | Mean total runtime (s) | Paired speedup | Parallel efficiency | Mean GPU utilization | Numerical equivalence |
+|---|---:|---:|---:|---:|---:|---:|---|
+| SHD | 1 | 0.699647 ± 0.029954 | 1561.09 ± 42.5351 | 1.00000 ± 0 | 1.00000 ± 0 | 16.9111% ± 0.564368% | exact |
+| SHD | 2 | 0.699647 ± 0.029954 | 1011.02 ± 8.85204 | 1.54400 ± 0.0342813 | 0.771999 ± 0.0171407 | 25.8264% ± 0.825906% | exact |
+| SHD | 4 | 0.699647 ± 0.029954 | 620.950 ± 8.46605 | 2.51471 ± 0.0930752 | 0.628677 ± 0.0232688 | 42.7625% ± 1.25962% | exact |
+| SSC | 1 | 0.426635 ± 0.0128545 | 2812.16 ± 31.2943 | 1.00000 ± 0 | 1.00000 ± 0 | 13.0648% ± 0.256050% | exact |
+| SSC | 2 | 0.426635 ± 0.0128545 | 1777.76 ± 44.2429 | 1.58222 ± 0.0227238 | 0.791112 ± 0.0113619 | 25.6943% ± 0.341631% | exact |
+| SSC | 4 | 0.426635 ± 0.0128545 | 1192.56 ± 22.1012 | 2.35830 ± 0.0176213 | 0.589575 ± 0.00440534 | 45.1094% ± 0.473272% | exact |
+| CIFAR-10 | 1 | 0.737100 ± 0.0192486 | 23074.3 ± 739.096 | 1.00000 ± 0 | 1.00000 ± 0 | 32.2526% ± 0.672774% | exact |
+| CIFAR-10 | 2 | 0.737100 ± 0.0192486 | 15427.8 ± 641.652 | 1.49625 ± 0.0356666 | 0.748123 ± 0.0178333 | 37.2154% ± 2.88017% | exact |
 
-Rank 0 alone selects clients, restores detached CPU updates to selected-client order, invokes the existing configured FedAvg implementation once, validates when the workload provides validation data, checkpoints, and performs official-test evaluation. Client assignment is `selected_position % process_count`; client randomness depends on the scientific seed streams, round, and client ID, never rank or device. Nonzero ranks construct neither validation nor official-test datasets.
+The capacity treatment used SHD and one physical GH200. CUDA MPS increased throughput, but the packed treatments were numerically different from their paired exclusive-process references and remain separate from authoritative accuracy comparisons.
 
-Exclusive-device execution uses one process per physical GPU and NCCL. The separate [device-capacity collection](experiments/device_capacity_evaluation/manifest.yaml) provides unmeasured CUDA MPS configurations with two or four client processes on one GPU, Gloo coordination, detached CPU state movement, and deterministic `device_index = process_rank % device_count` mapping. MPS treatments are not part of the 24-task matrix and none is declared preferable. Optional PyTorch profiling is disabled in ordinary executions because traces add overhead.
+| Client processes on one GPU | Test accuracy | Mean total runtime (s) | Paired speedup | Parallel efficiency | Mean GPU utilization | Numerical status |
+|---:|---:|---:|---:|---:|---:|---|
+| 1 | 0.699647 ± 0.0299540 | 1515.45 ± 85.4437 | 1.00000 ± 0 | 1.00000 ± 0 | 17.2476% ± 1.06860% | exact reference |
+| 2 | 0.699647 ± 0.0214393 | 864.519 ± 14.8104 | 1.75221 ± 0.0714499 | 0.876106 ± 0.0357250 | 32.5880% ± 1.56503% | difference observed |
+| 4 | 0.701561 ± 0.0271646 | 561.249 ± 5.20705 | 2.69982 ± 0.141900 | 0.674955 ± 0.0354750 | 44.7365% ± 0.912779% | difference observed |
 
-Each workload’s one-GPU distributed path is its timing and numerical reference. Logical federated communication remains separate from internal process movement, device telemetry, memory, busy time, and Slurm allocation. When Roihu telemetry is available, the execution record stores aggregate and per-device sample counts and utilization minima, means, and maxima; these remain physical-device observations rather than process busy time. No distributed CUDA, NCCL, or MPS execution evidence has been collected, so there is no speedup, utilization, numerical-equivalence, resource, or energy claim.
-
-Validate the matrix and submit it only when execution evidence is required:
-
-~~~bash
-python3 -m fedapfa.cli.scientific_manifest validate \
-  --manifest experiments/distributed_evaluation/manifest.yaml
-bash scripts/slurm/submit_roihu_distributed_evaluation.sh \
-  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn" \
-  --datasets shd,ssc,cifar10 \
-  --device-counts 1,2,4 \
-  --max-parallel 1
-~~~
-
-The wrapper submits separate one-, two-, and four-GPU arrays so every task receives its configured physical-device count; it automatically finds no four-GPU CIFAR task. It prints a labelled job ID for every submitted allocation group, and `--max-parallel` controls concurrency within each array group. Monitor every returned job and summarize the complete compatible collection with:
-
-~~~bash
-squeue --job <ONE_JOB_ID>,<TWO_JOB_ID>,<FOUR_JOB_ID> --array \
-  -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
-mkdir -p "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation"
-sacct -j <ONE_JOB_ID>,<TWO_JOB_ID>,<FOUR_JOB_ID> --array -X -P \
-  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES \
-  > "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation/slurm-accounting.txt"
-fedapfa-summarize-distributed-evaluation \
-  --manifest experiments/distributed_evaluation/manifest.yaml \
-  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/distributed_evaluation" \
-  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation" \
-  --slurm-accounting "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/distributed_evaluation/slurm-accounting.txt"
-~~~
+These are descriptive three-seed measurements, not claims of statistical significance, causal superiority, energy efficiency, multinode scalability, published reproduction, or thesis novelty.
 
 ## CIFAR-10 Fed-SNN protocols
 

@@ -134,58 +134,118 @@ done
 
 The generated output paths are `$WORK_DIR/results/federated/federated_summary.json`, `$WORK_DIR/results/federated/federated_summary.csv`, and `$WORK_DIR/results/federated/federated_summary.md`. Run-level evidence remains below `$WORK_DIR/runs/federated`, Slurm output below `$WORK_DIR/slurm-logs/federated`, and device telemetry below `$WORK_DIR/telemetry/federated`.
 
-## Distributed evaluation identity and resumption
+## Completed distributed execution reproduction
 
-The distributed [manifest](../experiments/distributed_evaluation/manifest.yaml) expands to 24 tasks: SHD and SSC each contribute one-, two-, and four-GPU treatments, CIFAR-10 contributes one- and two-GPU treatments, and all use seeds 7, 17, and 27. CIFAR-10 cannot request four devices because only two clients participate. Scientific identity is equal across physical-device treatments within a dataset and different across SHD, SSC, and CIFAR-10. Each dataset’s one-GPU distributed execution is its reference; sequential runtimes and other datasets are outside its paired denominator.
+The physical-device and capacity collections were executed from commit [`4491078710d01d22e9517e62c8de0f3554c4b3f2`](../results/distributed_evaluation/provenance/execution-commit.txt). Physical-device arrays were `250928`, `250929`, and `250946`; the capacity array was `250950`. All 33 tasks were `COMPLETED` with exit code `0:0`, every run had `resume_count: 0`, and every run accessed its official test collection once.
 
-Every process agrees on configuration, Git, dataset, split, partition, model initialization, seed identities, process count, physical-device count, control backend, CUDA process service, and single host. Exclusive execution maps one process to each visible GPU through `LOCAL_RANK`, uses NCCL, and rejects mismatched visibility. Same-GPU packing uses Gloo for CPU control and detached state movement while CUDA MPS serves local client work. Its mapping is deterministic by process rank and configured physical-device count. CPU Gloo remains restricted to integration testing.
-
-Run provenance includes `execution_provenance.json` and `process_mapping.json`; the latter contains stable rank, process, and device topology fields so a compatible allocation can resume on another host. `execution_measurements.json` records every distinct Slurm allocation used by an interrupted execution, each attempt's host and process mapping, resident host memory before and after workload construction, the signed memory difference, MPS archive and active-thread percentage when applicable, client/process/device counts, busy and idle durations, load imbalance, allocated and reserved memory, internal data movement, resumption count, and official-test duration. Summary accounting requires a row for every recorded allocation, sums their GPU-hours and elapsed time, and requires the completing allocation to report `COMPLETED` with exit code `0:0`; non-completing allocation states remain visible instead of being discarded. When the Roihu CSV is available, it also records finite physical-device utilization sample counts and aggregate and per-device minima, means, and maxima. Job-level utilization covers only its named execution attempt; the summarizer excludes that value from treatment statistics after resumption rather than presenting it as complete-run utilization. `round_metrics.jsonl` records ordered assignments and model/update identities. `client_metrics.jsonl` records process/device placement, population and presented examples, batches, data wait, seed, spike statistics, duration, and memory.
-
-Distributed checkpoints retain the entire resolved configuration and complete `parallel_execution` identity. Resumption rejects another dataset, scientific identity, device count, client processes per device, total process count, process mapping, control backend, CUDA process service, assignment rule, aggregation order, Git state, split, partition, or initialization. Only a completely collected and aggregated round, including configured validation and `last.pt`, advances durability. A failure during client work repeats the entire round from its incoming checkpoint. Rank 0 is the sole owner of shared checkpoints, metrics, validation, official-test, and acceptance records.
-
-The logical communication count excludes process transfers and remains directly comparable only within one scientific workload. Internal model distribution and collected update bytes are execution data movement. The summarizer groups by workload and then execution treatment, compares each seed with its own workload’s one-GPU execution, checks scientific, split, partition, selection, seed, example-count, aggregation, checkpoint, communication, and test-access identities, and measures maximum absolute and relative checkpoint-parameter differences, selected-round equality, accuracy and macro-F1 differences, and prediction agreement when predictions exist. Accuracy similarity alone is not numerical equivalence, and no tolerance is invented.
-
-Validate the collection locally:
+Use generic project and repository locations:
 
 ~~~bash
-fedapfa-validate-config experiments/distributed_evaluation/shd/lif_fedavg_1_gpu.yaml
-fedapfa-validate-config experiments/distributed_evaluation/shd/lif_fedavg_2_gpu.yaml
-fedapfa-validate-config experiments/distributed_evaluation/shd/lif_fedavg_4_gpu.yaml
-fedapfa-validate-config experiments/distributed_evaluation/ssc/lif_128_fedavg_1_gpu.yaml
-fedapfa-validate-config experiments/distributed_evaluation/ssc/lif_128_fedavg_2_gpu.yaml
-fedapfa-validate-config experiments/distributed_evaluation/ssc/lif_128_fedavg_4_gpu.yaml
-fedapfa-validate-config experiments/distributed_evaluation/cifar10/svgg9_bntt_noniid_1_gpu.yaml
-fedapfa-validate-config experiments/distributed_evaluation/cifar10/svgg9_bntt_noniid_2_gpu.yaml
-python3 -m fedapfa.cli.scientific_manifest validate \
-  --manifest experiments/distributed_evaluation/manifest.yaml
-python3 -m fedapfa.cli.scientific_manifest validate \
-  --manifest experiments/device_capacity_evaluation/manifest.yaml
-python3 -m pytest -q tests/unit/distributed/test_gloo_integration.py
+export HPC_SNN_REPO="<repository-path>"
+export CSC_PROJECT="<project-id>"
+export FEDAPFA_VENV="/projappl/$CSC_PROJECT/$USER/hpc-snn-venv"
+export WORK_DIR="/scratch/$CSC_PROJECT/$USER/hpc-snn"
+cd "$HPC_SNN_REPO"
 ~~~
 
-Optional profiler traces require `profiler_enabled: true` and explicit `profiled_rounds`; they add overhead and are excluded from ordinary runtime interpretation. The 24-task manifest leaves profiling disabled. The separate device-capacity collection represents unmeasured MPS configurations and does not identify a preferred packing level.
-
-No distributed CUDA, NCCL, or MPS run is committed. Once all 24 compatible tasks exist, aggregate them with:
+### Physical-device submission
 
 ~~~bash
-WORK_DIR="/scratch/$CSC_PROJECT/$USER/hpc-snn"
-mkdir -p "$WORK_DIR/results/distributed_evaluation"
-sacct -j <JOB_ID> --array -X -P \
-  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES \
-  > "$WORK_DIR/results/distributed_evaluation/slurm-accounting.txt"
-fedapfa-summarize-distributed-evaluation \
+"$FEDAPFA_VENV/bin/python3" -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/distributed_evaluation/manifest.yaml
+bash scripts/slurm/submit_roihu_distributed_evaluation.sh \
+  --collection distributed_evaluation \
+  --work-dir "$WORK_DIR" \
+  --datasets shd,ssc,cifar10 \
+  --device-counts 1,2,4 \
+  --max-parallel 1
+~~~
+
+The wrapper emits separate identifiers for one-, two-, and four-GPU arrays. The completed identifiers are stored in the [physical-device array record](../results/distributed_evaluation/provenance/slurm-array-ids.txt).
+
+### One-GPU capacity submission
+
+~~~bash
+"$FEDAPFA_VENV/bin/python3" -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/device_capacity_evaluation/manifest.yaml
+bash scripts/slurm/submit_roihu_distributed_evaluation.sh \
+  --collection device_capacity_evaluation \
+  --work-dir "$WORK_DIR" \
+  --datasets shd \
+  --device-counts 1 \
+  --max-parallel 1
+~~~
+
+The completed capacity identifier is stored in the [capacity array record](../results/device_capacity_evaluation/provenance/slurm-array-ids.txt).
+
+### Monitoring
+
+~~~bash
+export DISTRIBUTED_ARRAY_IDS="250928,250929,250946"
+export CAPACITY_ARRAY_IDS="250950"
+squeue --job "$DISTRIBUTED_ARRAY_IDS,$CAPACITY_ARRAY_IDS" --array \
+  -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+~~~
+
+### Slurm accounting collection
+
+On Roihu, the useful array-task notation came from the `JobID` field, such as `250928_0`. `JobIDRaw` identified the underlying allocation job and did not provide the notation required to join summary inputs to array tasks. The following transformation keeps array-task rows and renames the first column to the `JobIDRaw` header required by the summary parser:
+
+~~~bash
+mkdir -p "$WORK_DIR/results/distributed_evaluation/provenance"
+sacct -j "$DISTRIBUTED_ARRAY_IDS" --array -X -P \
+  --format=JobID,State,ExitCode,ElapsedRaw,AllocTRES |
+  awk -F'|' 'BEGIN {OFS="|"} NR == 1 {$1="JobIDRaw"; print; next} $1 ~ /^[0-9]+_[0-9]+$/ {print}' \
+  > "$WORK_DIR/results/distributed_evaluation/provenance/slurm-accounting.txt"
+
+mkdir -p "$WORK_DIR/results/device_capacity_evaluation/provenance"
+sacct -j "$CAPACITY_ARRAY_IDS" --array -X -P \
+  --format=JobID,State,ExitCode,ElapsedRaw,AllocTRES |
+  awk -F'|' 'BEGIN {OFS="|"} NR == 1 {$1="JobIDRaw"; print; next} $1 ~ /^[0-9]+_[0-9]+$/ {print}' \
+  > "$WORK_DIR/results/device_capacity_evaluation/provenance/slurm-accounting.txt"
+~~~
+
+### Summary generation
+
+~~~bash
+"$FEDAPFA_VENV/bin/python3" -m fedapfa.cli.summarize_distributed_evaluation \
   --manifest experiments/distributed_evaluation/manifest.yaml \
   --runs-root "$WORK_DIR/runs/distributed_evaluation" \
   --output-dir "$WORK_DIR/results/distributed_evaluation" \
-  --slurm-accounting "$WORK_DIR/results/distributed_evaluation/slurm-accounting.txt"
+  --slurm-accounting "$WORK_DIR/results/distributed_evaluation/provenance/slurm-accounting.txt"
+
+"$FEDAPFA_VENV/bin/python3" -m fedapfa.cli.summarize_distributed_evaluation \
+  --manifest experiments/device_capacity_evaluation/manifest.yaml \
+  --runs-root "$WORK_DIR/runs/device_capacity_evaluation" \
+  --output-dir "$WORK_DIR/results/device_capacity_evaluation" \
+  --slurm-accounting "$WORK_DIR/results/device_capacity_evaluation/provenance/slurm-accounting.txt"
 ~~~
+
+### Evidence verification
+
+The recorded SHA-256 files are relative to their collection directories:
+
+~~~bash
+(
+  cd "$HPC_SNN_REPO/results/distributed_evaluation"
+  sha256sum --check provenance/evidence-sha256.txt
+)
+(
+  cd "$HPC_SNN_REPO/results/device_capacity_evaluation"
+  sha256sum --check provenance/evidence-sha256.txt
+)
+git -C "$HPC_SNN_REPO" diff --exit-code -- \
+  results/distributed_evaluation \
+  results/device_capacity_evaluation
+~~~
+
+The committed [physical-device summary](../results/distributed_evaluation/distributed_evaluation_summary.md) validates 24/24 tasks, and the committed [capacity summary](../results/device_capacity_evaluation/distributed_evaluation_summary.md) validates 9/9 tasks. A `valid` collection passed its consistency gates; the capacity collection still records numerical differences for every packed comparison.
 
 ## GPU telemetry scope
 
 The Roihu array script samples supported `nvidia-smi` fields every two seconds and records the command, interval, unsupported fields, and CSV observations. Sampling begins before training and is stopped on normal exit, failure, or signal. These observations are job-level GPU telemetry. They are not measured network traffic, per-client energy, neural-model energy, or neuromorphic energy, and their sampling interval limits short-event attribution.
 
-The committed aggregation does not contain device-utilization or energy estimates. Logical communication counts communicated tensors and cannot be interpreted as network traffic or energy. A scheduler time limit is a reservation constraint, not an observed execution time.
+The committed distributed aggregations contain utilization estimates from these samples. They do not contain direct energy measurements. Logical communication counts communicated tensors and cannot be interpreted as physical network traffic or energy. A scheduler time limit is a reservation constraint, not an observed execution time.
 
 ## CIFAR-10 Fed-SNN identity
 
