@@ -161,6 +161,73 @@ These three-seed observations do not establish statistical significance, causali
 
 The earlier CIFAR-10 implementation completed with 18.23–26.79% official-test accuracy but used an incompatible representation, encoder, readout, initialization, timestep count, BNTT epsilon, loader rule, partition, and aggregation rule. Its configuration is retained outside the active manifest, and its generated evidence is unchanged.
 
+## Client resource measurement protocol
+
+### Matrix and topology
+
+The canonical [resource manifest](../experiments/resource_measurement/manifest.yaml) expands to exactly six executions: SHD 256/256 LIF FedAvg and SSC 128/128 LIF FedAvg, each with seeds 7, 17, and 27. Every execution reserves one physical GH200, starts one distributed process, uses one client process, uses NCCL, and disables CUDA MPS. The six tasks run sequentially in one Slurm allocation when uninterrupted.
+
+| Dataset | Training / validation / test source | Batch size | Clients selected / total | Rounds | Test policy |
+|---|---|---:|---:|---:|---|
+| SHD | official training file with established stratified validation / official test | 32 | 10 / 20 | 100 | construct and access once after checkpoint selection |
+| SSC | 75,466 official training / 9,981 official validation / 20,382 official test examples | 256 | 10 / 20 | 100 | access once after official-validation checkpoint selection |
+
+Both protocols use label-Dirichlet alpha 0.5, one local epoch, Adam learning rate 0.001, sample-count aggregation, 10 ms integration, and 700-to-140 channel reduction. There are no example or batch caps. Static client features use training indices only. Validation and official-test identities are rejected from those features, and official-test access during communication rounds is rejected.
+
+The expected accepted row count is 2 datasets × 3 seeds × 100 rounds × 10 clients = 6,000. SHD and SSC results are never pooled for dataset-specific reporting. Joint and transfer evaluations are explicitly labelled.
+
+### Paired identities and measurement transparency
+
+The measurement-disabled and measurement-enabled calibration repetitions restore the same model parameters, Python, NumPy, Torch CPU and Torch CUDA random states, and data-loader order. Client selection, training seeds, updates, update ordering, aggregation, and checkpoint selection remain independent of measurement values.
+
+Calibration update identity means the two state dictionaries have the same parameter keys, shapes, dtypes, and numerically identical tensor values under the declared strict comparison. It is a calibration condition, not a claim that an eventual cost model is exact. A missing scientific conclusion is not an execution failure.
+
+The resource collection is not an MPS treatment. Prior one-GPU MPS capacity evidence remains separate because packed client processes were numerically different. No MPS row may enter resource measurement or client-cost fitting.
+
+### Timing, power, energy, memory, and load definitions
+
+- Client wall time is the interval between monotonic nanosecond boundaries.
+- Data-wait time is time spent obtaining client batches.
+- CUDA-event time is the summed active-stream event duration after CUDA synchronization.
+- Residual host time is wall time minus data-wait and CUDA-event time.
+- Gross energy is trapezoidal integration of boundary-interpolated device power.
+- Idle-adjusted energy integrates the positive part of power minus the accepted idle median and remains separate from gross energy.
+- GPU utilization and memory utilization are 100 ms NVML samples, not energy estimates.
+- Peak allocated CUDA memory is live tensor allocation; peak reserved CUDA memory is allocator reservation. Neither is GPU HBM capacity, Grace memory, or Slurm memory.
+- Assignment makespan is the maximum measured process load in a candidate assignment.
+- Load imbalance is the declared dispersion of process loads relative to their mean.
+- Makespan regret is candidate measured makespan minus measured-oracle makespan.
+
+Each energy interval requires a sample immediately before and after its boundary and rejects a sample gap above 2.5 configured intervals. Gross and idle-adjusted joules, sample count, coverage, and optional hardware cumulative-energy difference are retained. Execution reconciliation reports client, aggregation, validation, checkpoint, other, idle-reference, and unattributed energy without substituting allocated GPU-hours.
+
+### Calibration and idle protocol
+
+The 100 ms interval is accepted only if at least ten alternating paired SHD training-client repetitions produce median runtime overhead at most 2%, at least 90% of measured client intervals contain ten or more samples, no sampling error occurs, exactly one UUID is observed, and parameter updates are numerically identical. The official test dataset is never constructed by calibration.
+
+Every scientific attempt records 30 seconds of pre-execution idle power after CUDA and measurement initialization and 30 seconds after evaluation. No data loading, validation, checkpoint I/O, or training occurs within an idle interval. Pre/post medians, temperature drift, the combined accepted median, and original samples are preserved per attempt.
+
+### Predictor availability and causal history
+
+Pre-assignment static predictors are example count, batch count, input-event count, sequence-length statistics, valid and estimated padded time bins, padding fraction, event density, represented classes, label entropy, round, dataset, model, and parameter count. Padded work reproduces the client's deterministic seeded batch ordering.
+
+Earlier-observation predictors include previous and exponentially weighted duration, gross and idle-adjusted energy, layer spike rates, spikes per example, observation count, and missing-history indicators. For round t, only accepted rows for that client in rounds less than t are permitted. Actual current batches, examples, timesteps, input events, spikes, timing, energy, and memory are post-execution observations and cannot be scheduler predictors.
+
+Seeds 7 and 17 are the fitting and client-grouped validation collection. Seed 27 is absent from fitting and model selection. The protocol evaluates SHD within-dataset, SSC within-dataset, joint, both directed transfers, and prequential seed-27 predictions. Client ID is grouping metadata, not a predictor.
+
+### Models, decision, and offline assignment
+
+The candidate hierarchy is fitting-set median, size, event structure, causal historical spikes, and a diagnostic current-spike oracle. Standardized ridge penalties and historical exponential coefficients 0.10, 0.30, 0.50, 0.70, and 0.90 are declared before evaluation. The coefficient and regression variant are chosen only through client-grouped fitting/validation observations from seeds 7 and 17. Robust linear and optional log-target variants follow the same separation. JSON serialization records fit-derived standardization and row hashes and must reproduce stored predictions.
+
+Historical spikes are adopted only if seed 27 shows at least 5% improvement in median absolute runtime error, no worsening of 90th-percentile runtime error, rank correlation within the declared tolerance or better, benefit on both datasets, negligible prediction time, and assignment closer to the measured oracle. Failure of any condition records spike_history_not_adopted and exports the strongest event/size model. The diagnostic oracle is never exported.
+
+Offline assignment uses the clients already selected for each round and compares round-robin, example-count longest-first, predicted-cost longest-first, and measured-cost oracle at process counts two and four. It assigns each client exactly once and has no production scheduling side effect.
+
+### Acceptance and evidence status
+
+A valid summary requires six completed compatible runs, 6,000 accepted rows, passing calibration, complete timing and energy coverage, no leakage, one official-test access per run, finite metrics, JSON prediction reproduction, and complete Git, configuration, hardware, Slurm, and input-hash provenance. Incomplete intervals remain in attempt records with exclusion reasons and cannot enter fitting.
+
+Execution completion, measurement completeness, energy completeness, and hypothesis outcome are separate fields. Accuracy is not a completion condition. A valid summary may adopt or reject spike history. At present no Roihu resource collection or summary is committed, so no runtime, energy, prediction, assignment, scientific-significance, or novelty conclusion is available.
+
 ## Centralized CIFAR-10 learning verification
 
 `experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml` uses the data representation and S-VGG9 model with a distinct `runs/fedsnn_centralized_verification` identity. It fits the 45,000-example training subset, selects by the 5,000-example validation subset, and evaluates the official test once. This configuration remains an independent model-learning check and is not part of the six-task federated manifest. The completed federated evidence above independently demonstrates that the implementation learns under the declared Table I protocol.

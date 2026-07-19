@@ -141,6 +141,61 @@ Allocated tensor peaks, reserved CUDA peaks, device HBM, Grace CPU memory, and S
 
 Exact submission, monitoring, accounting transformation, summary generation, and evidence-verification commands are in the [reproducibility guide](../../docs/reproducibility.md#completed-distributed-execution-reproduction). Scientific interpretation and limitations are in the [distributed record](../../thesis_records/distributed_execution.md).
 
+## Client resource measurement allocation
+
+The resource campaign uses one gpumedium allocation for all six tasks, run sequentially when uninterrupted:
+
+| Resource | Allocation or process layout |
+|---|---|
+| Node | 1 |
+| Physical GH200 | 1 |
+| Distributed processes | 1 |
+| Client processes per GPU | 1 |
+| CPU cores | 72 |
+| Slurm memory | 217086M |
+| Control backend | NCCL |
+| CUDA MPS | disabled |
+| Time limit | 24 hours |
+
+This is the authoritative one-process-per-GPU path. It is distinct from the earlier one-GPU capacity treatment that used two or four MPS client processes with Gloo control. MPS settings are rejected for resource measurement, and no capacity row can enter the client-cost table.
+
+The runner loads python-pytorch/2.10, activates /projappl/$CSC_PROJECT/$USER/hpc-snn-venv, and sets python_bin to that environment's exact bin/python3. It verifies imports for PyTorch, fedapfa, and the maintained pynvml binding and prints Python, PyTorch, project, CUDA, driver, and NVML information. The environment setup installs nvidia-ml-py, whose import name is pynvml; imports remain safe on login hosts where the NVML shared library is unavailable, but requested measurement fails clearly on a compute node without NVML.
+
+When distributed initialization is needed, the runner uses:
+
+    "$python_bin" -m torch.distributed.run --nproc-per-node=1
+
+It never invokes the module-provided torchrun executable. That executable is tied to the module installation's interpreter path, whereas the project and its NVML dependency are installed in the project environment. Direct use can therefore start workers outside the required environment.
+
+NVML resolution uses the UUID of the allocated visible GPU. CUDA index zero is not assumed to equal NVML physical index zero. Exactly one visible CUDA device and one resolved UUID are required. This collection does not use CUDA MPS, so MPS pipe and log variables must be absent; TMPDIR MPS directories apply only to separately identified capacity measurements.
+
+The observed Roihu association limit remains 40 GH200 resources. AssocGrpGRES means the association group's generic-resource limit is occupied; it is a pending reason rather than execution failure. Pending allocations have not begun allocated execution and are not execution billing.
+
+Resource terms remain distinct:
+
+- one physical GH200 is an accelerator allocation, not a process count;
+- the distributed process is the single PyTorch rank;
+- 72 CPU cores are Grace CPU resources attached to the reservation;
+- GPU HBM is accelerator memory and differs from allocated and reserved CUDA memory;
+- Grace memory is CPU memory associated with the Grace component;
+- 217086M is Slurm memory and is not GPU HBM;
+- NVML watts and integrated joules are device measurements;
+- Slurm elapsed time and allocated GPU-hours are accounting quantities;
+- pending time is outside allocated execution time.
+
+Utilization alone does not establish energy efficiency, and allocated GPU-hours cannot substitute for device energy. The two 30-second idle intervals establish an attempt-specific power reference; they are device measurements rather than scheduler accounting.
+
+Submit and monitor with:
+
+~~~bash
+bash scripts/slurm/submit_roihu_resource_measurement.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn"
+squeue --job <JOB_ID> \
+  -o "%.18i %.9P %.28j %.12T %.10M %.10l %R"
+~~~
+
+The launcher verifies existing SHD and SSC files and never downloads data. It runs a passing training-only SHD calibration before iterating the exact six-task manifest. Exact accounting, fitting, summary, and verification commands are in the [reproducibility guide](../../docs/reproducibility.md#client-resource-measurement-and-cost-estimation). Scientific status and limitations are in the [resource record](../../thesis_records/resource_measurement.md); no resource result is available until Roihu records and aggregation are committed.
+
 ## CIFAR-10 Fed-SNN execution and evidence
 
 The six-task execution completed successfully. The [Slurm accounting record](../../results/fedsnn_paper_evaluation/provenance/slurm-accounting.txt) contains tasks `236880_0` through `236880_5`, all `COMPLETED` with exit code `0:0`. Each task used one GH200, and every scientific execution reached round 100. CIFAR-10 was already present at `$WORK_DIR/data/cifar10`; neither launcher nor trainer downloaded it.

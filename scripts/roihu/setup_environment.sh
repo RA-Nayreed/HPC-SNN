@@ -7,7 +7,8 @@ python3 -m venv --system-site-packages "$venv"
 source "$venv/bin/activate"
 python3 -m pip install --upgrade pip
 python3 -m pip install --no-deps -e "$repo"
-python3 -m pip install "numpy>=1.24" "h5py>=3.9" "pyyaml>=6" "matplotlib" "scipy" "tqdm" "pytest>=8" "ruff>=0.6"
+python3 -m pip install "numpy>=1.24" "h5py>=3.9" "pyyaml>=6" "matplotlib" "scipy" "tqdm" \
+  "nvidia-ml-py>=12.535.133" "pytest>=8" "ruff>=0.6"
 python3 -m pip install --no-deps "spikingjelly==0.0.0.0.14"
 if [[ "${INSTALL_DCLS:-0}" == 1 ]]; then
   python3 -m pip install --no-deps "dcls==0.1.1"
@@ -22,8 +23,9 @@ print("DCLS 0.1.1 forward/backward probe passed")
 PY
 fi
 python3 - <<'PY'
-import platform,h5py,matplotlib,numpy,scipy,torch,torchvision,tqdm,yaml
+import platform,h5py,matplotlib,numpy,pynvml,scipy,torch,torchvision,tqdm,yaml
 import spikingjelly
 print(platform.machine(),torch.__version__,h5py.__version__,numpy.__version__,yaml.__version__)
+print("nvml_binding", getattr(pynvml, "__version__", "available"))
 print((torch.tensor([1.0])+1).item())
 PY

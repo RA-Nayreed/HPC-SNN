@@ -201,9 +201,12 @@ def train_client(
     device: torch.device,
     training_seed: int,
     model_payload: int,
+    measurement_hook=None,
 ) -> ClientResult:
     """Train a detached model copy with a newly constructed local optimizer."""
 
+    if measurement_hook is not None:
+        measurement_hook.start()
     server_before = clone_state_dict(server_model.state_dict())
     local_model = copy.deepcopy(server_model).to(device)
     local_model.load_state_dict(server_before)
@@ -283,26 +286,31 @@ def train_client(
                         break
                 data_wait_time += time.monotonic() - data_wait_started
                 reset_snn_state(local_model)
-                with torch.profiler.record_function("client_cpu_to_device"):
-                    moved = _move(batch, device, federation.get("non_blocking_transfer", True))
-                optimizer.zero_grad(set_to_none=True)
-                with torch.profiler.record_function("client_forward"):
-                    logits, rates = _forward(local_model, moved, poisson_generator)
-                    loss = criterion(logits, moved.labels)
-                if not torch.isfinite(loss):
-                    raise FloatingPointError("client loss contains NaN or infinity")
-                with torch.profiler.record_function("client_backward"):
-                    loss.backward()
-                for parameter in local_model.parameters():
-                    if parameter.grad is not None and not torch.isfinite(parameter.grad).all():
-                        raise FloatingPointError("client gradient contains NaN or infinity")
-                gradient_clip = federation.get("gradient_clip")
-                if gradient_clip is not None:
-                    torch.nn.utils.clip_grad_norm_(local_model.parameters(), gradient_clip)
-                with torch.profiler.record_function("client_optimizer_step"):
-                    optimizer.step()
-                if any(not torch.isfinite(parameter).all() for parameter in local_model.parameters()):
-                    raise FloatingPointError("client model contains NaN or infinity")
+                timing_token = measurement_hook.begin_device_work() if measurement_hook is not None else None
+                try:
+                    with torch.profiler.record_function("client_cpu_to_device"):
+                        moved = _move(batch, device, federation.get("non_blocking_transfer", True))
+                    optimizer.zero_grad(set_to_none=True)
+                    with torch.profiler.record_function("client_forward"):
+                        logits, rates = _forward(local_model, moved, poisson_generator)
+                        loss = criterion(logits, moved.labels)
+                    if not torch.isfinite(loss):
+                        raise FloatingPointError("client loss contains NaN or infinity")
+                    with torch.profiler.record_function("client_backward"):
+                        loss.backward()
+                    for parameter in local_model.parameters():
+                        if parameter.grad is not None and not torch.isfinite(parameter.grad).all():
+                            raise FloatingPointError("client gradient contains NaN or infinity")
+                    gradient_clip = federation.get("gradient_clip")
+                    if gradient_clip is not None:
+                        torch.nn.utils.clip_grad_norm_(local_model.parameters(), gradient_clip)
+                    with torch.profiler.record_function("client_optimizer_step"):
+                        optimizer.step()
+                    if any(not torch.isfinite(parameter).all() for parameter in local_model.parameters()):
+                        raise FloatingPointError("client model contains NaN or infinity")
+                finally:
+                    if measurement_hook is not None:
+                        measurement_hook.end_device_work(timing_token)
                 loss_value = float(loss.detach())
                 accuracy_value = float((logits.argmax(1) == moved.labels).float().mean())
                 if first_loss is None:
@@ -312,6 +320,8 @@ def train_client(
                 for name, value in rates.items():
                     rate_sums[name] = rate_sums.get(name, 0.0) + float(value.detach()) * moved.rate_weight
                     rate_weights[name] = rate_weights.get(name, 0) + moved.rate_weight
+                if measurement_hook is not None:
+                    measurement_hook.observe_batch(moved, rates)
                 reset_snn_state(local_model)
         synchronize_cuda(device)
         elapsed = time.monotonic() - started
@@ -335,7 +345,11 @@ def train_client(
         local_state = clone_state_dict(local_model.state_dict())
         peak_memory = max(peak_memory_values) if device.type == "cuda" else None
         peak_reserved = max(peak_reserved_values) if device.type == "cuda" else None
+        if measurement_hook is not None:
+            measurement_hook.finish(data_wait_time)
     finally:
+        if measurement_hook is not None:
+            measurement_hook.abort_if_open()
         restore_global_rng_state(saved_rng, device if distributed_cuda else None)
     if batch_count == 0 or first_loss is None or last_loss is None:
         raise RuntimeError(f"client {client_id} produced no training batches")

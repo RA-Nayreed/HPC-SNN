@@ -10,7 +10,15 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 authors = [{ name = "Rezwan Ahmad Nayreed", email = "RezwanAhmad.Nayreed@student.oulu.fi" }]
-dependencies = ["torch>=2.1", "numpy>=1.24", "h5py>=3.9", "pyyaml>=6.0", "spikingjelly==0.0.0.0.14"]
+dependencies = [
+    "torch>=2.1",
+    "numpy>=1.24",
+    "h5py>=3.9",
+    "pyyaml>=6.0",
+    "spikingjelly==0.0.0.0.14",
+    "matplotlib>=3.8",
+    "nvidia-ml-py>=12.535.133",
+]
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0", "ruff>=0.6"]
@@ -30,9 +38,14 @@ fedapfa-derive-heterogeneity-context = "fedapfa.cli.derive_heterogeneity_context
 fedapfa-summarize-heterogeneity = "fedapfa.cli.summarize_heterogeneity:main"
 fedapfa-summarize-published-fedsnn = "fedapfa.cli.summarize_published_fedsnn:main"
 fedapfa-summarize-distributed-evaluation = "fedapfa.cli.summarize_distributed_evaluation:main"
+fedapfa-calibrate-resource-measurement = "fedapfa.cli.calibrate_resource_measurement:main"
+fedapfa-train-resource-measurement = "fedapfa.cli.train_resource_measurement:main"
+fedapfa-build-client-cost-data = "fedapfa.cli.build_client_cost_data:main"
+fedapfa-fit-client-cost = "fedapfa.cli.fit_client_cost:main"
+fedapfa-summarize-resource-measurement = "fedapfa.cli.summarize_resource_measurement:main"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/fedapfa"]
+packages = ["src/fedapfa", "analysis"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

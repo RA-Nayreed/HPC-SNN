@@ -119,16 +119,31 @@ def train_rank_clients(
             assignment.client_id,
         )
         with torch.profiler.record_function("client_model_construction_and_training"):
-            result = training_function(
-                model,
-                bundle.client_dataset(assignment.client_id),
-                assignment.client_id,
-                round_number,
-                config,
-                context.device,
-                training_seed,
-                model_payload_bytes,
-            )
+            client_dataset = bundle.client_dataset(assignment.client_id)
+            if hasattr(training_function, "train_assigned_client"):
+                result = training_function.train_assigned_client(
+                    model,
+                    client_dataset,
+                    assignment.client_id,
+                    round_number,
+                    config,
+                    context.device,
+                    training_seed,
+                    model_payload_bytes,
+                    selected_position=assignment.selected_position,
+                    process_rank=context.rank,
+                )
+            else:
+                result = training_function(
+                    model,
+                    client_dataset,
+                    assignment.client_id,
+                    round_number,
+                    config,
+                    context.device,
+                    training_seed,
+                    model_payload_bytes,
+                )
         cpu_result = _cpu_result(result)
         envelope = ClientResultEnvelope(
             selected_position=assignment.selected_position,

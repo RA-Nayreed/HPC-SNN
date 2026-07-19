@@ -28,7 +28,7 @@ from fedapfa.utilities.git_metadata import git_metadata
 from fedapfa.utilities.run_records import RunAction, initialize_run, plan_run
 
 
-def _override(config: dict, args: argparse.Namespace) -> dict:
+def _override(config: dict, args: argparse.Namespace, validator=validate_distributed_evaluation_config) -> dict:
     resolved = copy.deepcopy(config)
     if args.data_root:
         resolved["dataset"]["root"] = args.data_root
@@ -36,7 +36,7 @@ def _override(config: dict, args: argparse.Namespace) -> dict:
         resolved["output_root"] = args.output_root
     if args.seed is not None:
         resolved["seed"] = args.seed
-    validate_distributed_evaluation_config(resolved)
+    validator(resolved)
     return resolved
 
 
@@ -58,21 +58,16 @@ def _broadcast_action(context, action: RunAction | None) -> RunAction:
     )
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description="Train one single-node distributed FedAvg evaluation.")
-    parser.add_argument("config")
-    parser.add_argument("--data-root")
-    parser.add_argument("--output-root")
-    parser.add_argument("--seed", type=int)
-    resume_group = parser.add_mutually_exclusive_group()
-    resume_group.add_argument("--resume")
-    resume_group.add_argument("--resume-auto", action="store_true")
-    args = parser.parse_args()
-    config = _override(load_distributed_evaluation_config(args.config), args)
+def execute_distributed(config: dict, args: argparse.Namespace, module_name: str, session_factory=None):
+    """Run the established distributed path with an optional measurement lifecycle."""
+
     context = initialize_process_context(config["parallel_execution"])
+    session = None
+    training_token = None
+    result = None
     try:
         command = shlex.join(
-            [sys.executable, "-m", "fedapfa.cli.train_federated_distributed", *sys.argv[1:]]
+            [sys.executable, "-m", module_name, *sys.argv[1:]]
         )
         coordinator_action = (
             plan_run(config, command, args.resume, args.resume_auto) if context.is_coordinator else None
@@ -81,7 +76,7 @@ def main() -> None:
         if action.skip_completed:
             if context.is_coordinator:
                 print(f"completed distributed execution already exists; skipping: {action.run_dir}")
-            return
+            return action.run_dir
 
         resident_memory_before_workload = process_resident_memory_bytes()
         workload = prepare_federated_execution_workload(config, coordinator=context.is_coordinator)
@@ -116,6 +111,15 @@ def main() -> None:
             identity,
             process_resident_memory_before_workload_bytes=resident_memory_before_workload,
         )
+        if session_factory is not None:
+            model.to(context.device)
+            if context.device.type == "cuda":
+                import torch
+
+                torch.cuda.synchronize(context.device)
+            session = session_factory(config, action.run_dir, bundle, model, context)
+            session.start()
+            training_token = session.begin("training_execution")
         result = train_distributed_federated(
             model,
             bundle,
@@ -124,12 +128,41 @@ def main() -> None:
             context,
             process_records,
             action.resume_checkpoint,
-            client_training=workload.client_training,
+            client_training=session if session is not None else workload.client_training,
+            measurement_session=session,
         )
+        if session is not None:
+            session.end(training_token)
+            training_token = None
+            measurement_acceptance = session.stop(bool(result and result.get("completed")))
+            session = None
+            if not measurement_acceptance["accepted"]:
+                raise SystemExit(2)
         if context.is_coordinator and not result["completed"]:
             raise SystemExit(2)
+        return action.run_dir
     finally:
+        if session is not None:
+            try:
+                session.stop(bool(result and result.get("completed")))
+            except BaseException:
+                if result is not None:
+                    raise
         close_process_context()
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="Train one single-node distributed FedAvg evaluation.")
+    parser.add_argument("config")
+    parser.add_argument("--data-root")
+    parser.add_argument("--output-root")
+    parser.add_argument("--seed", type=int)
+    resume_group = parser.add_mutually_exclusive_group()
+    resume_group.add_argument("--resume")
+    resume_group.add_argument("--resume-auto", action="store_true")
+    args = parser.parse_args()
+    config = _override(load_distributed_evaluation_config(args.config), args)
+    execute_distributed(config, args, "fedapfa.cli.train_federated_distributed")
 
 
 if __name__ == "__main__":

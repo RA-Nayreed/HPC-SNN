@@ -174,3 +174,13 @@ fedapfa-summarize-published-fedsnn \
   --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/fedsnn_paper_evaluation" \
   --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/results/fedsnn_paper_evaluation"
 ~~~
+
+## Client resource measurement and cost estimation
+
+The planned resource collection extends the established single-process FedAvg path with per-client monotonic timing, CUDA events, persistent 100 ms NVML sampling, 30-second idle references, trapezoidal device-energy integration, and features available before assignment. It contains exactly six sequential one-GH200 executions: SHD LIF and SSC LIF-128, each with seeds 7, 17, and 27, 20 clients, ten selected clients, and 100 rounds. CUDA MPS is excluded. The expected accepted analysis table has 6,000 client rows.
+
+Seeds 7 and 17 are reserved for fitting and client-grouped model selection; seed 27 is reserved for evaluation. Constant, size, event-structure, causal historical-spike, and diagnostic-oracle models are compared. The diagnostic oracle cannot be exported, and historical spike features are adopted only under the predeclared seed-27 rule. Deterministic offline assignment compares round-robin, example-count, predicted-cost, and measured-cost assignments for two and four candidate processes; it is not a deployed scheduler.
+
+The [scientific record](thesis_records/resource_measurement.md) defines timing, energy, calibration, features, leakage protection, models, resumption, acceptance, and limitations. The [manifest](experiments/resource_measurement/manifest.yaml), [protocol](docs/experimental_protocol.md#client-resource-measurement-protocol), [reproducibility guide](docs/reproducibility.md#client-resource-measurement-and-cost-estimation), and [Roihu guide](environment/roihu/README.md#client-resource-measurement-allocation) define execution and analysis.
+
+The implementation does not constitute scientific evidence. No resource result, cost-model accuracy, energy value, spike-history decision, statistical-significance statement, or novelty claim is available until the Roihu records and their aggregation are committed.

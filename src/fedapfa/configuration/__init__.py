@@ -14,6 +14,11 @@ from .federated_manifest import FEDERATED_SEEDS, load_federated_config, load_fed
 from .federated_validation import paired_configuration_identity, validate_federated_config
 from .loader import load_config, load_resolved_config
 from .manifest import ManifestTask, load_centralized_manifest
+from .resource_measurement import (
+    load_resource_measurement_config,
+    load_resource_measurement_manifest,
+    validate_resource_measurement_config,
+)
 from .scientific_manifests import (
     ContextTask,
     load_heterogeneity_context_tasks,
@@ -49,4 +54,7 @@ __all__ = [
     "validate_distributed_evaluation_config",
     "validate_parallel_execution",
     "process_device_mapping",
+    "load_resource_measurement_config",
+    "load_resource_measurement_manifest",
+    "validate_resource_measurement_config",
 ]

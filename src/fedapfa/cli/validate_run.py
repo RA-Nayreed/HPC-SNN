@@ -8,6 +8,7 @@ from fedapfa.configuration import (
     load_resolved_config,
     validate_distributed_evaluation_config,
     validate_federated_config,
+    validate_resource_measurement_config,
 )
 
 
@@ -17,7 +18,9 @@ def main() -> None:
     args = parser.parse_args()
     candidate = load_resolved_config(args.config)
     if candidate.get("execution") == "federated":
-        if "parallel_execution" in candidate:
+        if "resource_measurement" in candidate:
+            validate_resource_measurement_config(candidate)
+        elif "parallel_execution" in candidate:
             validate_distributed_evaluation_config(candidate)
         else:
             validate_federated_config(candidate)

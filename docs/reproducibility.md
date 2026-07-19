@@ -247,6 +247,141 @@ The Roihu array script samples supported `nvidia-smi` fields every two seconds a
 
 The committed distributed aggregations contain utilization estimates from these samples. They do not contain direct energy measurements. Logical communication counts communicated tensors and cannot be interpreted as physical network traffic or energy. A scheduler time limit is a reservation constraint, not an observed execution time.
 
+## Client resource measurement and cost estimation
+
+The commands below describe the planned campaign. They have not been used to create scientific evidence in this repository. Set paths for the established project environment and scratch location:
+
+~~~bash
+export WORK_DIR="/scratch/$CSC_PROJECT/$USER/hpc-snn"
+export REPO_ROOT="/path/to/HPC-SNN"
+export FEDAPFA_VENV="/projappl/$CSC_PROJECT/$USER/hpc-snn-venv"
+python_bin="$FEDAPFA_VENV/bin/python3"
+cd "$REPO_ROOT"
+~~~
+
+The environment setup installs the maintained NVML Python binding:
+
+~~~bash
+bash scripts/roihu/setup_environment.sh
+"$python_bin" -c "import pynvml, torch, fedapfa; print(torch.__version__, fedapfa.__file__)"
+~~~
+
+### Validate the scientific inputs
+
+~~~bash
+"$python_bin" -m fedapfa.cli.validate_run \
+  experiments/resource_measurement/shd/lif_client_resource.yaml
+"$python_bin" -m fedapfa.cli.validate_run \
+  experiments/resource_measurement/ssc/lif_128_client_resource.yaml
+"$python_bin" -m fedapfa.cli.scientific_manifest validate \
+  --manifest experiments/resource_measurement/manifest.yaml
+"$python_bin" -m fedapfa.cli.scientific_manifest count \
+  --manifest experiments/resource_measurement/manifest.yaml
+~~~
+
+The count command must print 6, with seeds exactly 7, 17, and 27 for both SHD and SSC.
+
+### Submit and monitor
+
+~~~bash
+bash scripts/slurm/submit_roihu_resource_measurement.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn"
+~~~
+
+The wrapper returns one parseable allocation ID. It submits one gpumedium allocation with one node, one GH200, 72 CPU cores, 217086M Slurm memory, and a 24-hour limit. Calibration runs first; the six manifest tasks then run sequentially. No array concurrency or MPS option exists.
+
+~~~bash
+squeue --job <JOB_ID> \
+  -o "%.18i %.9P %.28j %.12T %.10M %.10l %R"
+~~~
+
+The runner records the allocation ID, execution commit, and GPU UUID. It refuses missing SHD or SSC files and never downloads them.
+
+### Collect accounting
+
+After execution, retain the exact Slurm fields required by the summarizer:
+
+~~~bash
+mkdir -p "$WORK_DIR/results/resource_measurement/provenance"
+sacct -j <JOB_ID> -X --parsable2 \
+  --format=JobID,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
+  > "$WORK_DIR/results/resource_measurement/provenance/slurm-accounting.txt"
+~~~
+
+ElapsedRaw is allocation elapsed execution time. Allocated GPU-hours are derived from ElapsedRaw and the allocated GPU count in AllocTRES. Internal execution time, summed client wall time, CUDA-event time, device joules, and pending time remain distinct. Pending time is not part of allocated execution time. Energy must not be inferred from GPU-hours, utilization, or billing units.
+
+If compatible resumption used more than one allocation, request every parent allocation in the same accounting record:
+
+~~~bash
+sacct -j <JOB_ID_1>,<JOB_ID_2> -X --parsable2 \
+  --format=JobID,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
+  > "$WORK_DIR/results/resource_measurement/provenance/slurm-accounting.txt"
+~~~
+
+Each accepted client row retains the UUID, calibration hash, and idle baseline of its own execution attempt. A resumable Slurm interruption may therefore precede a completed allocation, but a failed scientific allocation remains invalid. Allocated GPU-hours sum all recorded allocation elapsed times.
+
+### Build the accepted client-cost table
+
+Run this only after all six runs have accepted measurement records:
+
+~~~bash
+"$python_bin" -m fedapfa.cli.build_client_cost_data \
+  --runs-root "$WORK_DIR/runs/resource_measurement" \
+  --result-root "$WORK_DIR/results/resource_measurement/cost_data"
+~~~
+
+The command writes client_cost_data.csv, client_cost_schema.json, client_cost_provenance.json, and explicit exclusions. It rejects anything other than 6,000 unique, finite, covered, topology-compatible rows with matching Git, configuration, model, partition, initialization, sampling, calibration, attempt, UUID, and official-test identities.
+
+### Fit and evaluate cost models
+
+~~~bash
+"$python_bin" -m fedapfa.cli.fit_client_cost \
+  --data "$WORK_DIR/results/resource_measurement/cost_data/client_cost_data.csv" \
+  --provenance "$WORK_DIR/results/resource_measurement/cost_data/client_cost_provenance.json" \
+  --config experiments/resource_measurement/shd/lif_client_resource.yaml \
+  --result-root "$WORK_DIR/results/resource_measurement/cost_models"
+~~~
+
+The cost-estimation policy is common to the two resource configurations. The command fits with seeds 7 and 17, performs client-grouped selection there, evaluates seed 27, verifies model JSON prediction reproduction, and writes cost metrics, export decisions, assignment readiness, and model JSON files.
+
+### Generate the collection summary and figures
+
+~~~bash
+"$python_bin" -m fedapfa.cli.summarize_resource_measurement \
+  --runs-root "$WORK_DIR/runs/resource_measurement" \
+  --artifact-root "$WORK_DIR/results/resource_measurement/cost_models" \
+  --result-root "$WORK_DIR/results/resource_measurement/summary" \
+  --slurm-accounting "$WORK_DIR/results/resource_measurement/provenance/slurm-accounting.txt"
+~~~
+
+The command requires six accepted runs, 6,000 rows, complete energy and timing, complete compatible Slurm allocation accounting, finite metrics, and model round-trip checks. It writes JSON, CSV, Markdown, deterministic figures, and a source-data CSV for every figure.
+
+The installed entry points provide the same interfaces:
+
+~~~bash
+fedapfa-calibrate-resource-measurement --help
+fedapfa-train-resource-measurement --help
+fedapfa-build-client-cost-data --help
+fedapfa-fit-client-cost --help
+fedapfa-summarize-resource-measurement --help
+~~~
+
+### Verify artifacts without altering evidence
+
+Capture hashes before analysis and compare them afterward:
+
+~~~bash
+find "$WORK_DIR/runs/resource_measurement" -type f -print0 \
+  | sort -z \
+  | xargs -0 sha256sum \
+  > "$WORK_DIR/results/resource_measurement/provenance/run-input-sha256.txt"
+sha256sum -c "$WORK_DIR/results/resource_measurement/provenance/run-input-sha256.txt"
+~~~
+
+The client-cost provenance also stores every accepted input file hash. Completed compatible runs are not overwritten. Resume-auto accepts only the established compatible checkpoint and measurement identities; incomplete client work remains in attempt and exclusion records.
+
+Scientific interpretation belongs in the [resource record](../thesis_records/resource_measurement.md). Until execution records and aggregation are committed, that record permits no resource or prediction conclusion.
+
 ## CIFAR-10 Fed-SNN identity
 
 The configurations use experiment names `cifar10_fedsnn_paper_reported_iid_evaluation` and `cifar10_fedsnn_paper_reported_noniid_evaluation` under `runs/fedsnn_paper_evaluation`. The unsuccessful independent implementation retains its original name and `runs/published_fedsnn` root; the superseded, unexecuted released-command identity is also different. Automatic resumption therefore cannot resolve either identity into a directory.

@@ -14,6 +14,7 @@ from fedapfa.configuration import (
     load_heterogeneity_context_tasks,
     load_heterogeneity_manifest,
     load_published_fedsnn_manifest,
+    load_resource_measurement_manifest,
 )
 
 
@@ -34,6 +35,8 @@ def _tasks(path: str):
         return load_distributed_evaluation_manifest(path)
     if collection == "device_capacity_evaluation":
         return load_device_capacity_manifest(path)
+    if collection == "resource_measurement":
+        return load_resource_measurement_manifest(path)
     raise ValueError(f"unsupported scientific collection: {collection}")
 
 

@@ -7,6 +7,7 @@ import json
 import os
 import statistics
 import time
+from contextlib import nullcontext
 from pathlib import Path
 
 import torch
@@ -225,6 +226,7 @@ def train_distributed_federated(
     resume_checkpoint: str | Path | None = None,
     stop_after_round: int | None = None,
     client_training=None,
+    measurement_session=None,
 ) -> dict | None:
     """Execute synchronous FedAvg; only rank zero mutates shared run records."""
 
@@ -416,6 +418,11 @@ def train_distributed_federated(
     rounds = config["federated"]["rounds"]
     payload = model_payload_bytes(model.state_dict())
     for round_number in range(start_round, rounds + 1):
+        round_measurement = (
+            measurement_session.begin("communication_round", {"round_number": round_number})
+            if measurement_session is not None
+            else None
+        )
         active_profiler = _start_round_profiler(config, context, path, round_number)
         _synchronize_processes(context)
         round_started = time.monotonic()
@@ -425,13 +432,20 @@ def train_distributed_federated(
             else None
         )
         selected = broadcast_selected_clients(context, selected_at_rank_zero)
+        if measurement_session is not None:
+            measurement_session.prepare_selected_clients(selected, round_number)
         assignments = assign_clients(selected, context.world_size)
 
         server_before = clone_state_dict(model.state_dict()) if context.is_coordinator else None
         synchronize_cuda(context.device)
         distribution_started = time.monotonic()
-        with torch.profiler.record_function("global_model_distribution"):
-            incoming_model_id = broadcast_model_state(model, context)
+        with (
+            measurement_session.measure("model_distribution", {"round_number": round_number})
+            if measurement_session is not None
+            else nullcontext()
+        ):
+            with torch.profiler.record_function("global_model_distribution"):
+                incoming_model_id = broadcast_model_state(model, context)
         _synchronize_processes(context)
         model_distribution_time = time.monotonic() - distribution_started
 
@@ -453,8 +467,13 @@ def train_distributed_federated(
         parallel_client_time = time.monotonic() - client_wall_started
 
         collection_started = time.monotonic()
-        with torch.profiler.record_function("client_result_collection"):
-            gathered_payloads, serialized_sizes = gather_rank_payloads(rank_payload, context)
+        with (
+            measurement_session.measure("result_collection", {"round_number": round_number})
+            if measurement_session is not None
+            else nullcontext()
+        ):
+            with torch.profiler.record_function("client_result_collection"):
+                gathered_payloads, serialized_sizes = gather_rank_payloads(rank_payload, context)
         _synchronize_processes(context)
         result_collection_time = time.monotonic() - collection_started
 
@@ -473,12 +492,17 @@ def train_distributed_federated(
 
             synchronize_cuda(context.device)
             aggregation_started = time.monotonic()
-            with torch.profiler.record_function("selected_order_aggregation"):
-                weights, aggregated_update_norm, update_cosines = aggregate_client_results(
-                    model,
-                    local_results,
-                    config["federated"]["aggregation_weighting"],
-                )
+            with (
+                measurement_session.measure("aggregation", {"round_number": round_number})
+                if measurement_session is not None
+                else nullcontext()
+            ):
+                with torch.profiler.record_function("selected_order_aggregation"):
+                    weights, aggregated_update_norm, update_cosines = aggregate_client_results(
+                        model,
+                        local_results,
+                        config["federated"]["aggregation_weighting"],
+                    )
             synchronize_cuda(context.device)
             aggregation_time = time.monotonic() - aggregation_started
             after_model_id = state_identity(model.state_dict())
@@ -503,16 +527,21 @@ def train_distributed_federated(
                 validation_seed = derive_seed(config["seed"], config["seed_streams"]["validation"], round_number)
                 synchronize_cuda(context.device)
                 validation_started = time.monotonic()
-                with torch.profiler.record_function("coordinator_validation"):
-                    validation = validate_global_model(
-                        model,
-                        bundle.validation_dataset,
-                        context.device,
-                        config["federated"]["local_batch_size"],
-                        validation_seed,
-                        config["federated"]["data_loader_workers"],
-                        config["federated"]["persistent_workers"],
-                    )
+                with (
+                    measurement_session.measure("validation", {"round_number": round_number})
+                    if measurement_session is not None
+                    else nullcontext()
+                ):
+                    with torch.profiler.record_function("coordinator_validation"):
+                        validation = validate_global_model(
+                            model,
+                            bundle.validation_dataset,
+                            context.device,
+                            config["federated"]["local_batch_size"],
+                            validation_seed,
+                            config["federated"]["data_loader_workers"],
+                            config["federated"]["persistent_workers"],
+                        )
                 synchronize_cuda(context.device)
                 validation_time = time.monotonic() - validation_started
                 improved = best_accuracy is None or validation.accuracy > best_accuracy
@@ -669,10 +698,15 @@ def train_distributed_federated(
                 "round_records": round_records,
             }
             checkpoint_started = time.monotonic()
-            with torch.profiler.record_function("coordinator_checkpoint_write"):
-                if improved:
-                    save_federated_checkpoint(checkpoint_dir / "best.pt", **checkpoint_arguments)
-                save_federated_checkpoint(checkpoint_dir / "last.pt", **checkpoint_arguments)
+            with (
+                measurement_session.measure("checkpoint_writing", {"round_number": round_number})
+                if measurement_session is not None
+                else nullcontext()
+            ):
+                with torch.profiler.record_function("coordinator_checkpoint_write"):
+                    if improved:
+                        save_federated_checkpoint(checkpoint_dir / "best.pt", **checkpoint_arguments)
+                    save_federated_checkpoint(checkpoint_dir / "last.pt", **checkpoint_arguments)
             checkpoint_time = time.monotonic() - checkpoint_started
             round_result["checkpoint_time_seconds"] = checkpoint_time
             round_result["total_round_time_seconds"] = time.monotonic() - round_started
@@ -717,6 +751,8 @@ def train_distributed_federated(
             measurements["rounds"].append(measurement)
             measurements["rounds"].sort(key=lambda value: value["round_number"])
             atomic_write_json(path / "execution_measurements.json", measurements)
+            if measurement_session is not None:
+                measurement_session.end(round_measurement)
             if validation is None:
                 logger.info(
                     "round=%d selected=%s validation=unavailable process_count=%d",
@@ -801,15 +837,20 @@ def train_distributed_federated(
             },
         )
         test_dataset = bundle.official_test_dataset(model_selected=True)
-        test_result = evaluate_model(
-            model,
-            test_dataset,
-            context.device,
-            config["federated"]["local_batch_size"],
-            bundle.resolved_seed_values["final_test"],
-            config["federated"]["data_loader_workers"],
-            config["federated"]["persistent_workers"],
-        )
+        with (
+            measurement_session.measure("validation", {"official_test": True})
+            if measurement_session is not None
+            else nullcontext()
+        ):
+            test_result = evaluate_model(
+                model,
+                test_dataset,
+                context.device,
+                config["federated"]["local_batch_size"],
+                bundle.resolved_seed_values["final_test"],
+                config["federated"]["data_loader_workers"],
+                config["federated"]["persistent_workers"],
+            )
         official_test_time = time.monotonic() - official_started
         official_record = {
             **official_identity,

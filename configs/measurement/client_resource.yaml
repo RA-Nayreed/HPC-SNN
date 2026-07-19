@@ -1,0 +1,27 @@
+resource_measurement:
+  enabled: true
+  sampling_backend: nvml
+  sampling_interval_ms: 100
+  idle_before_seconds: 30
+  idle_after_seconds: 30
+  require_power: true
+  require_gpu_utilization: true
+  require_memory_utilization: true
+  require_cuda_events: true
+  maximum_sample_gap_multiplier: 2.5
+  timing_reconciliation_tolerance_seconds: 0.000002
+  boundary_reconciliation_tolerance_joules: 0.000001
+  calibration:
+    paired_repetitions: 10
+    maximum_median_overhead_fraction: 0.02
+    minimum_samples_per_client: 10
+    minimum_client_fraction: 0.90
+cost_estimation:
+  fitting_seeds: [7, 17]
+  evaluation_seed: 27
+  historical_weight_candidates: [0.10, 0.30, 0.50, 0.70, 0.90]
+  ridge_regularization: [0.0001, 0.001, 0.01, 0.1, 1.0, 10.0]
+  percentage_denominator_floor: 0.001
+  rank_correlation_tolerance: 0.01
+  minimum_runtime_error_improvement_fraction: 0.05
+  prediction_time_fraction_limit: 0.001

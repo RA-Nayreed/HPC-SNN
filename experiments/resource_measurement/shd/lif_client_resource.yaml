@@ -1,0 +1,11 @@
+include:
+  - ../../distributed_evaluation/shd/lif_fedavg_1_gpu.yaml
+  - ../../../configs/measurement/client_resource.yaml
+name: shd_lif_client_resource
+output_root: runs/resource_measurement
+pairing_group: shd_lif_client_resource
+execution_measurement:
+  record_device_utilization: false
+metadata:
+  experiment: shd_lif_client_resource
+  purpose: resource_measurement

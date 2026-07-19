@@ -1,0 +1,11 @@
+include:
+  - ../../distributed_evaluation/ssc/lif_128_fedavg_1_gpu.yaml
+  - ../../../configs/measurement/client_resource.yaml
+name: ssc_lif_128_client_resource
+output_root: runs/resource_measurement
+pairing_group: ssc_lif_128_client_resource
+execution_measurement:
+  record_device_utilization: false
+metadata:
+  experiment: ssc_lif_128_client_resource
+  purpose: resource_measurement
