@@ -59,3 +59,11 @@ def test_execution_attempt_advances_from_partial_sample_record(tmp_path):
         encoding="utf-8",
     )
     assert _next_execution_attempt(tmp_path, []) == 5
+
+
+def test_execution_attempt_advances_from_sampler_startup_attempt_record(tmp_path):
+    (tmp_path / "calibration_reference.json").write_text(
+        json.dumps({"schema_version": 1, "attempts": [{"execution_attempt": 3}]}),
+        encoding="utf-8",
+    )
+    assert _next_execution_attempt(tmp_path, []) == 4

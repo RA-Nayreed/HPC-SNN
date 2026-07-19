@@ -33,7 +33,7 @@ def calibrate_measurement(
     minimum_sample_fraction: float = 0.9,
     device: torch.device | None = None,
 ) -> dict:
-    """Alternate condition order while restoring model and every RNG state."""
+    """Warm both paths, then alternate recorded pairs with exact state restoration."""
 
     if repetitions < 10:
         raise ValueError("calibration requires at least ten paired repetitions")
@@ -42,13 +42,23 @@ def calibrate_measurement(
     observations: list[CalibrationObservation] = []
     errors: list[str] = []
     uuids: set[str] = set()
+
+    def restore_initial_state() -> None:
+        model.load_state_dict(initial_state, strict=True)
+        restore_global_rng_state(
+            initial_rng,
+            device if device is not None and device.type == "cuda" else None,
+        )
+
     try:
+        for measured in (True, False):
+            restore_initial_state()
+            run_once(measured)
         for repetition in range(repetitions):
             values = {}
             order = [True, False] if repetition % 2 == 0 else [False, True]
             for measured in order:
-                model.load_state_dict(initial_state, strict=True)
-                restore_global_rng_state(initial_rng, device if device is not None and device.type == "cuda" else None)
+                restore_initial_state()
                 duration, update, sample_count, observed_uuids = run_once(measured)
                 if not math.isfinite(duration) or duration <= 0:
                     raise ValueError("calibration duration must be finite and positive")
@@ -73,8 +83,7 @@ def calibrate_measurement(
                 )
             )
     finally:
-        model.load_state_dict(initial_state, strict=True)
-        restore_global_rng_state(initial_rng, device if device is not None and device.type == "cuda" else None)
+        restore_initial_state()
     overheads = [value.relative_overhead for value in observations]
     sample_fraction = sum(value.measured_sample_count >= minimum_samples for value in observations) / repetitions
     median_overhead = statistics.median(overheads)
@@ -88,6 +97,14 @@ def calibrate_measurement(
         errors.append("measured_update_identity_failed")
     return {
         "schema_version": 1,
+        "warm_up_policy": {
+            "execution_order": ["measured", "unmeasured"],
+            "measured_executions": 1,
+            "unmeasured_executions": 1,
+            "included_in_paired_observations": False,
+            "included_in_overhead_statistic": False,
+            "state_restored_before_each_execution": True,
+        },
         "paired_repetitions": repetitions,
         "observations": [value.__dict__ for value in observations],
         "median_relative_overhead": median_overhead,

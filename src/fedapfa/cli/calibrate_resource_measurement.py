@@ -15,7 +15,7 @@ from fedapfa.federated.randomness import derive_seed
 from fedapfa.federated.workload import prepare_federated_execution_workload
 from fedapfa.measurement.calibration import calibrate_measurement
 from fedapfa.measurement.clock import CudaTimingAdapter
-from fedapfa.measurement.power import NvmlAdapter, PowerSampler
+from fedapfa.measurement.power import NvmlProcessSampler
 from fedapfa.measurement.records import read_jsonl
 from fedapfa.utilities.serialization import atomic_write_json
 
@@ -100,8 +100,9 @@ def main() -> None:
         sampler = None
         hook = None
         if measured:
-            sampler = PowerSampler(
-                NvmlAdapter(uuid, 1),
+            sampler = NvmlProcessSampler(
+                uuid,
+                1,
                 samples_path,
                 int(config["resource_measurement"]["sampling_interval_ms"]),
             )

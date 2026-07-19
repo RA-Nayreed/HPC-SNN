@@ -22,7 +22,7 @@ from .client_interval import ClientIntervalIdentity, IntervalRecorder
 from .clock import CudaTimingAdapter, SystemMonotonicClock
 from .energy import integrate_energy
 from .features import FEATURE_AVAILABILITY, ObservedClientWork, extract_static_client_features
-from .power import DeviceSample, NvmlAdapter, PowerSampler
+from .power import DeviceSample, NvmlProcessSampler, PowerSampler
 from .records import append_jsonl, read_jsonl, resource_row_key, write_measurement_acceptance
 
 
@@ -66,6 +66,12 @@ def _next_execution_attempt(run_dir: Path, idle_attempts: list[dict]) -> int:
         "client_resource_records.jsonl",
     ):
         for value in read_jsonl(run_dir / name):
+            if value.get("execution_attempt") is not None:
+                observed.add(int(value["execution_attempt"]))
+    calibration_record = run_dir / "calibration_reference.json"
+    if calibration_record.is_file():
+        calibration = json.loads(calibration_record.read_text(encoding="utf-8"))
+        for value in calibration.get("attempts", []):
             if value.get("execution_attempt") is not None:
                 observed.add(int(value["execution_attempt"]))
     return max(observed or {0}) + 1
@@ -199,13 +205,21 @@ class ResourceMeasurementSession:
         self.idle_attempts = list(previous_attempts)
         self.intervals = IntervalRecorder(self.run_dir / "execution_intervals.jsonl", self.clock)
         self.timing_factory = timing_factory or (lambda device: CudaTimingAdapter(device, self.clock))
-        nvml_adapter = adapter or NvmlAdapter(self.gpu_uuid, context.visible_device_count)
-        self.sampler = PowerSampler(
-            nvml_adapter,
-            self.run_dir / "device_samples.jsonl",
-            int(measurement["sampling_interval_ms"]),
-            self.execution_attempt,
-        )
+        if adapter is None:
+            self.sampler = NvmlProcessSampler(
+                self.gpu_uuid,
+                context.visible_device_count,
+                self.run_dir / "device_samples.jsonl",
+                int(measurement["sampling_interval_ms"]),
+                self.execution_attempt,
+            )
+        else:
+            self.sampler = PowerSampler(
+                adapter,
+                self.run_dir / "device_samples.jsonl",
+                int(measurement["sampling_interval_ms"]),
+                self.execution_attempt,
+            )
         self._started = False
         self._open_scopes: list[tuple[object, str]] = []
         self._static_cache: dict[tuple[int, str], dict] = {}
@@ -481,8 +495,10 @@ class ResourceMeasurementSession:
         except BaseException as error:
             idle_error = f"{type(error).__name__}: {error}"
         finally:
-            self.sampler.stop()
-            self._started = False
+            try:
+                self.sampler.stop()
+            finally:
+                self._started = False
         return self._finalize(execution_completed, idle_error)
 
     def _finalize(self, execution_completed: bool, idle_error: str | None) -> dict:

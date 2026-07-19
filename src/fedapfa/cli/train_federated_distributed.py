@@ -134,8 +134,9 @@ def execute_distributed(config: dict, args: argparse.Namespace, module_name: str
         if session is not None:
             session.end(training_token)
             training_token = None
-            measurement_acceptance = session.stop(bool(result and result.get("completed")))
+            completed_session = session
             session = None
+            measurement_acceptance = completed_session.stop(bool(result and result.get("completed")))
             if not measurement_acceptance["accepted"]:
                 raise SystemExit(2)
         if context.is_coordinator and not result["completed"]:
