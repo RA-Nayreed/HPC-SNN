@@ -1,0 +1,10 @@
+JobIDRaw|State|ExitCode|ElapsedRaw|AllocTRES
+250950_0|COMPLETED|0:0|1443|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
+250950_1|COMPLETED|0:0|1608|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
+250950_2|COMPLETED|0:0|1567|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
+250950_3|COMPLETED|0:0|875|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
+250950_4|COMPLETED|0:0|905|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
+250950_5|COMPLETED|0:0|889|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
+250950_6|COMPLETED|0:0|583|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
+250950_7|COMPLETED|0:0|585|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
+250950_8|COMPLETED|0:0|593|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1
