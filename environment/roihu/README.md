@@ -143,10 +143,11 @@ Exact submission, monitoring, accounting transformation, summary generation, and
 
 ## Client resource measurement allocation
 
-The resource campaign uses one gpumedium allocation for all six tasks, run sequentially when uninterrupted:
+The completed resource collection used Slurm job `291481` and execution commit `3ddae173c89125bc69922d80bde5732ed6cd050e`. The job is `COMPLETED` with exit code `0:0`. All six scientific executions ran sequentially in one gpumedium allocation:
 
 | Resource | Allocation or process layout |
 |---|---|
+| Slurm job | 291481 |
 | Node | 1 |
 | Physical GH200 | 1 |
 | Distributed processes | 1 |
@@ -155,7 +156,9 @@ The resource campaign uses one gpumedium allocation for all six tasks, run seque
 | Slurm memory | 217086M |
 | Control backend | NCCL |
 | CUDA MPS | disabled |
-| Time limit | 24 hours |
+| NVML sampling interval | 100 ms |
+| Slurm elapsed execution time | 34,051 seconds |
+| Allocated GPU-hours | 9.45861111111111 |
 
 This is the authoritative one-process-per-GPU path. It is distinct from the earlier one-GPU capacity treatment that used two or four MPS client processes with Gloo control. MPS settings are rejected for resource measurement, and no capacity row can enter the client-cost table.
 
@@ -168,6 +171,10 @@ When distributed initialization is needed, the runner uses:
 It never invokes the module-provided torchrun executable. That executable is tied to the module installation's interpreter path, whereas the project and its NVML dependency are installed in the project environment. Direct use can therefore start workers outside the required environment.
 
 NVML resolution uses the UUID of the allocated visible GPU. CUDA index zero is not assumed to equal NVML physical index zero. Exactly one visible CUDA device and one resolved UUID are required. This collection does not use CUDA MPS, so MPS pipe and log variables must be absent; TMPDIR MPS directories apply only to separately identified capacity measurements.
+
+The accepted training-only calibration used ten paired repetitions. One measured and one unmeasured warm-up execution were excluded from the paired observations and overhead statistic, with state restored before each execution. It passed with median relative overhead `0.01713823842158517` (about 1.7138%, below the declared 2% threshold), sample coverage `1.0`, identical numerical updates, no sampling errors, a consistent GPU UUID, and zero official-test accesses.
+
+The six executions were sequential in this allocation to retain consistent device identity, share one accepted calibration, keep device-power attribution unambiguous, and avoid interference from concurrent measured workloads. This choice defines the accepted collection; it is not a requirement for every future experiment.
 
 The observed Roihu association limit remains 40 GH200 resources. AssocGrpGRES means the association group's generic-resource limit is occupied; it is a pending reason rather than execution failure. Pending allocations have not begun allocated execution and are not execution billing.
 
@@ -185,16 +192,26 @@ Resource terms remain distinct:
 
 Utilization alone does not establish energy efficiency, and allocated GPU-hours cannot substitute for device energy. The two 30-second idle intervals establish an attempt-specific power reference; they are device measurements rather than scheduler accounting.
 
-Submit and monitor with:
+Inspect the committed accounting with:
 
 ~~~bash
-bash scripts/slurm/submit_roihu_resource_measurement.sh \
-  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn"
-squeue --job <JOB_ID> \
-  -o "%.18i %.9P %.28j %.12T %.10M %.10l %R"
+sacct -j 291481 -X --parsable2 \
+  --format=JobID,State,ExitCode,ElapsedRaw,AllocTRES,Start,End
 ~~~
 
-The launcher verifies existing SHD and SSC files and never downloads data. It runs a passing training-only SHD calibration before iterating the exact six-task manifest. Exact accounting, fitting, summary, and verification commands are in the [reproducibility guide](../../docs/reproducibility.md#client-resource-measurement-and-cost-estimation). Scientific status and limitations are in the [resource record](../../thesis_records/resource_measurement.md); no resource result is available until Roihu records and aggregation are committed.
+The accounting quantities remain separate from internal execution time, summed client wall time, CUDA-event time, integrated device energy, and pending time. The [committed summary](../../results/resource_measurement/resource_measurement_summary.json) records `33217.69320165331` seconds of internal execution time, `11457.10155192` seconds of summed client wall time, and `8159.062962005615` seconds of CUDA-event time. Pending time is null. Accepted client-training intervals contain `1883612.6948749206 J` gross and `52380.5986610567 J` idle-adjusted device energy; neither total measures the entire allocation.
+
+With the preserved execution directories and generated cost artifacts available at `$WORK_DIR`, the summary interface is:
+
+~~~bash
+"$python_bin" -m fedapfa.cli.summarize_resource_measurement \
+  --runs-root "$WORK_DIR/runs/resource_measurement" \
+  --artifact-root "$WORK_DIR/results/resource_measurement/cost_models" \
+  --result-root "$WORK_DIR/results/resource_measurement/summary" \
+  --slurm-accounting "$WORK_DIR/results/resource_measurement/provenance/slurm-accounting.txt"
+~~~
+
+Exact fitting, summary regeneration, and hash-verification commands are in the [reproducibility guide](../../docs/reproducibility.md#client-resource-measurement-and-cost-estimation). Scientific interpretation and limitations are in the [resource record](../../thesis_records/resource_measurement.md).
 
 ## CIFAR-10 Fed-SNN execution and evidence
 

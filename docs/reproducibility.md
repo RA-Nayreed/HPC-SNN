@@ -249,12 +249,42 @@ The committed distributed aggregations contain utilization estimates from these 
 
 ## Client resource measurement and cost estimation
 
-The commands below describe the planned campaign. They have not been used to create scientific evidence in this repository. Set paths for the established project environment and scratch location:
+The committed evidence records execution commit `3ddae173c89125bc69922d80bde5732ed6cd050e` and Slurm job `291481`, which is `COMPLETED` with exit code `0:0`. The allocation used one GH200, 72 CPU cores, and 217086M Slurm memory for 34,051 seconds, equal to `9.45861111111111` allocated GPU-hours. The [accounting record](../results/resource_measurement/provenance/slurm-accounting.txt), [execution-commit record](../results/resource_measurement/provenance/execution-commit.txt), [job-ID record](../results/resource_measurement/provenance/slurm-job-id.txt), and [accounting hash](../results/resource_measurement/provenance/accounting-sha256.json) preserve this identity.
+
+### Committed evidence
+
+The [authoritative summary JSON](../results/resource_measurement/resource_measurement_summary.json) reports `valid: true` for the accepted execution matrix:
+
+| Dataset | Model | Batch size | Seeds | Accepted records per execution | Accepted records |
+|---|---|---:|---|---:|---:|
+| SHD | 256/256 LIF | 32 | 7, 17, 27 | 1,000 | 3,000 |
+| SSC | 128/128 LIF | 256 | 7, 17, 27 | 1,000 | 3,000 |
+
+Each execution used 100 communication rounds, ten selected clients per round, one local epoch, sample-count FedAvg, one process, one physical GH200, no CUDA MPS, and one official-test access. The collection has 6,000 accepted client rows. Calibration, power coverage, timing completeness, energy integration, finite metrics, and model JSON reload verification all passed.
+
+The [calibration record](../results/resource_measurement/instrumentation_calibration.json) preserves ten paired repetitions, the recorded measured/unmeasured warm-up policy, median relative overhead `0.01713823842158517`, sample coverage `1.0`, identical numerical updates, no sampling errors, one consistent GPU UUID, and zero official-test accesses. Calibration used training data only.
+
+The authoritative analysis artifacts are:
+
+- [resource summary JSON](../results/resource_measurement/resource_measurement_summary.json), [CSV](../results/resource_measurement/resource_measurement_summary.csv), and [Markdown](../results/resource_measurement/resource_measurement_summary.md);
+- [cost evaluation JSON](../results/resource_measurement/cost_model_evaluation.json), [CSV](../results/resource_measurement/cost_model_evaluation.csv), and [Markdown](../results/resource_measurement/cost_model_evaluation.md);
+- [exported scheduling model](../results/resource_measurement/client_cost_model.json) and [gross-energy model](../results/resource_measurement/energy_cost_model.json);
+- [offline assignment evidence](../results/resource_measurement/assignment_readiness.json);
+- [input hashes](../results/resource_measurement/provenance/run-input-sha256.txt).
+
+Seeds 7 and 17 supplied fitting and client-grouped selection. Seed 27 was absent from fitting, historical-weight selection, and model selection and supplied untouched evaluation. Evaluation covers SHD, SSC, their joint collection, both directed transfers, and prequential seed-27 prediction. Client identity is used only for grouping and history lookup. It is not a predictor; current-execution spike measurements occur after assignment and are excluded from deployable models.
+
+The exported scheduling model is a ridge `event_structure` model targeting `client_wall_time_seconds`; the corresponding exported energy model is a ridge `event_structure` model targeting `gross_energy_joules`. Stored JSON reloads reproduce predictions. The spike decision is `spike_history_not_adopted`: SHD passed the declared median, tail, and rank conditions, whereas SSC failed the median and tail conditions while maintaining rank. Prediction-time and offline-assignment conditions passed, but the two-dataset adoption rule did not.
+
+### Environment paths
+
+Set paths for the established project environment, preserved scratch execution directories, and a separate regeneration destination:
 
 ~~~bash
 export WORK_DIR="/scratch/$CSC_PROJECT/$USER/hpc-snn"
 export REPO_ROOT="/path/to/HPC-SNN"
 export FEDAPFA_VENV="/projappl/$CSC_PROJECT/$USER/hpc-snn-venv"
+export REGEN_ROOT="/scratch/$CSC_PROJECT/$USER/resource-measurement-regeneration"
 python_bin="$FEDAPFA_VENV/bin/python3"
 cd "$REPO_ROOT"
 ~~~
@@ -281,29 +311,29 @@ bash scripts/roihu/setup_environment.sh
 
 The count command must print 6, with seeds exactly 7, 17, and 27 for both SHD and SSC.
 
-### Submit and monitor
+### Independent execution and monitoring
 
 ~~~bash
 bash scripts/slurm/submit_roihu_resource_measurement.sh \
   --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn"
 ~~~
 
-The wrapper returns one parseable allocation ID. It submits one gpumedium allocation with one node, one GH200, 72 CPU cores, 217086M Slurm memory, and a 24-hour limit. Calibration runs first; the six manifest tasks then run sequentially. No array concurrency or MPS option exists.
+The wrapper submits one gpumedium allocation with one node, one GH200, 72 CPU cores, 217086M Slurm memory, and a 24-hour limit. Calibration precedes the six sequential manifest executions. No array concurrency or MPS option exists. This command is for an independent execution; it is not needed to inspect the committed evidence.
 
 ~~~bash
 squeue --job <JOB_ID> \
   -o "%.18i %.9P %.28j %.12T %.10M %.10l %R"
 ~~~
 
-The runner records the allocation ID, execution commit, and GPU UUID. It refuses missing SHD or SSC files and never downloads them.
+The runner records the allocation ID, execution commit, and GPU UUID. It refuses missing SHD or SSC files and never downloads them. The committed collection used job `291481`.
 
 ### Collect accounting
 
-After execution, retain the exact Slurm fields required by the summarizer:
+The committed accounting can be queried with the exact fields required by the summarizer:
 
 ~~~bash
 mkdir -p "$WORK_DIR/results/resource_measurement/provenance"
-sacct -j <JOB_ID> -X --parsable2 \
+sacct -j 291481 -X --parsable2 \
   --format=JobID,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
   > "$WORK_DIR/results/resource_measurement/provenance/slurm-accounting.txt"
 ~~~
@@ -322,12 +352,12 @@ Each accepted client row retains the UUID, calibration hash, and idle baseline o
 
 ### Build the accepted client-cost table
 
-Run this only after all six runs have accepted measurement records:
+Regenerate the accepted client-cost table from the six preserved execution directories into the separate destination:
 
 ~~~bash
 "$python_bin" -m fedapfa.cli.build_client_cost_data \
   --runs-root "$WORK_DIR/runs/resource_measurement" \
-  --result-root "$WORK_DIR/results/resource_measurement/cost_data"
+  --result-root "$REGEN_ROOT/cost_data"
 ~~~
 
 The command writes client_cost_data.csv, client_cost_schema.json, client_cost_provenance.json, and explicit exclusions. It rejects anything other than 6,000 unique, finite, covered, topology-compatible rows with matching Git, configuration, model, partition, initialization, sampling, calibration, attempt, UUID, and official-test identities.
@@ -336,10 +366,10 @@ The command writes client_cost_data.csv, client_cost_schema.json, client_cost_pr
 
 ~~~bash
 "$python_bin" -m fedapfa.cli.fit_client_cost \
-  --data "$WORK_DIR/results/resource_measurement/cost_data/client_cost_data.csv" \
-  --provenance "$WORK_DIR/results/resource_measurement/cost_data/client_cost_provenance.json" \
+  --data "$REGEN_ROOT/cost_data/client_cost_data.csv" \
+  --provenance "$REGEN_ROOT/cost_data/client_cost_provenance.json" \
   --config experiments/resource_measurement/shd/lif_client_resource.yaml \
-  --result-root "$WORK_DIR/results/resource_measurement/cost_models"
+  --result-root "$REGEN_ROOT/cost_models"
 ~~~
 
 The cost-estimation policy is common to the two resource configurations. The command fits with seeds 7 and 17, performs client-grouped selection there, evaluates seed 27, verifies model JSON prediction reproduction, and writes cost metrics, export decisions, assignment readiness, and model JSON files.
@@ -349,9 +379,9 @@ The cost-estimation policy is common to the two resource configurations. The com
 ~~~bash
 "$python_bin" -m fedapfa.cli.summarize_resource_measurement \
   --runs-root "$WORK_DIR/runs/resource_measurement" \
-  --artifact-root "$WORK_DIR/results/resource_measurement/cost_models" \
-  --result-root "$WORK_DIR/results/resource_measurement/summary" \
-  --slurm-accounting "$WORK_DIR/results/resource_measurement/provenance/slurm-accounting.txt"
+  --artifact-root "$REGEN_ROOT/cost_models" \
+  --result-root "$REGEN_ROOT/summary" \
+  --slurm-accounting "$REPO_ROOT/results/resource_measurement/provenance/slurm-accounting.txt"
 ~~~
 
 The command requires six accepted runs, 6,000 rows, complete energy and timing, complete compatible Slurm allocation accounting, finite metrics, and model round-trip checks. It writes JSON, CSV, Markdown, deterministic figures, and a source-data CSV for every figure.
@@ -380,7 +410,9 @@ sha256sum -c "$WORK_DIR/results/resource_measurement/provenance/run-input-sha256
 
 The client-cost provenance also stores every accepted input file hash. Completed compatible runs are not overwritten. Resume-auto accepts only the established compatible checkpoint and measurement identities; incomplete client work remains in attempt and exclusion records.
 
-Scientific interpretation belongs in the [resource record](../thesis_records/resource_measurement.md). Until execution records and aggregation are committed, that record permits no resource or prediction conclusion.
+The committed client-training energy totals are `1883612.6948749206 J` gross and `52380.5986610567 J` idle-adjusted. They do not measure the entire Slurm allocation. Exact timing and energy should not be expected on another system: accelerator identity, host behavior, software, workload interference, idle baseline, and 100 ms NVML sampling can change observed values. Reproduction on another system can test the method and consistency gates, but it does not reproduce this GH200 allocation by identity.
+
+Scientific interpretation, model metrics, transfer evidence, assignment comparisons, and limitations are in the [resource record](../thesis_records/resource_measurement.md).
 
 ## CIFAR-10 Fed-SNN identity
 

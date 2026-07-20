@@ -163,7 +163,7 @@ The earlier CIFAR-10 implementation completed with 18.23–26.79% official-test 
 
 ## Client resource measurement protocol
 
-### Matrix and topology
+### Predeclared matrix and topology
 
 The canonical [resource manifest](../experiments/resource_measurement/manifest.yaml) expands to exactly six executions: SHD 256/256 LIF FedAvg and SSC 128/128 LIF FedAvg, each with seeds 7, 17, and 27. Every execution reserves one physical GH200, starts one distributed process, uses one client process, uses NCCL, and disables CUDA MPS. The six tasks run sequentially in one Slurm allocation when uninterrupted.
 
@@ -174,7 +174,7 @@ The canonical [resource manifest](../experiments/resource_measurement/manifest.y
 
 Both protocols use label-Dirichlet alpha 0.5, one local epoch, Adam learning rate 0.001, sample-count aggregation, 10 ms integration, and 700-to-140 channel reduction. There are no example or batch caps. Static client features use training indices only. Validation and official-test identities are rejected from those features, and official-test access during communication rounds is rejected.
 
-The expected accepted row count is 2 datasets × 3 seeds × 100 rounds × 10 clients = 6,000. SHD and SSC results are never pooled for dataset-specific reporting. Joint and transfer evaluations are explicitly labelled.
+The predeclared accepted row count is 2 datasets × 3 seeds × 100 rounds × 10 clients = 6,000. SHD and SSC results are never pooled for dataset-specific reporting. Joint and transfer evaluations are explicitly labelled. The observed collection contains exactly those 6,000 rows: 1,000 accepted client measurements for every dataset/seed execution.
 
 ### Paired identities and measurement transparency
 
@@ -226,7 +226,27 @@ Offline assignment uses the clients already selected for each round and compares
 
 A valid summary requires six completed compatible runs, 6,000 accepted rows, passing calibration, complete timing and energy coverage, no leakage, one official-test access per run, finite metrics, JSON prediction reproduction, and complete Git, configuration, hardware, Slurm, and input-hash provenance. Incomplete intervals remain in attempt records with exclusion reasons and cannot enter fitting.
 
-Execution completion, measurement completeness, energy completeness, and hypothesis outcome are separate fields. Accuracy is not a completion condition. A valid summary may adopt or reject spike history. At present no Roihu resource collection or summary is committed, so no runtime, energy, prediction, assignment, scientific-significance, or novelty conclusion is available.
+Execution completion, measurement completeness, energy completeness, and hypothesis outcome are separate fields. Accuracy is not a completion condition. A valid summary may adopt or reject spike history.
+
+### Observed evidence
+
+The [committed summary](../results/resource_measurement/resource_measurement_summary.json) reports `valid: true`, six completed executions, 6,000 accepted client records, three SHD and three SSC executions, seeds 7, 17, and 27, and true calibration, power-coverage, timing-completeness, energy-integration, official-test-isolation, finite-metric, and model-JSON-reload fields. The preserved execution commit is `3ddae173c89125bc69922d80bde5732ed6cd050e`; summary, run, and exported-model provenance agree.
+
+The accepted calibration had ten paired repetitions and one measured and one unmeasured warm-up execution before those pairs. Warm-up state was restored before each execution and warm-up observations were excluded from both the paired observations and the overhead statistic. The outcome passed with median relative overhead `0.01713823842158517`, sample coverage `1.0`, identical numerical updates, no sampling errors, the single UUID `GPU-f50ec698-57aa-4b59-108c-fa678abbc391`, and zero official-test accesses. The measured overhead is nonzero and remains below the declared `0.02` threshold.
+
+Slurm job `291481` is `COMPLETED` with exit code `0:0`. The one-GH200 allocation used 72 CPU cores and 217086M Slurm memory for 34,051 seconds, or `9.45861111111111` allocated GPU-hours. Separately, the summary records `33217.69320165331` seconds of internal execution time, `11457.10155192` seconds of summed client wall time, and `8159.062962005615` seconds of CUDA-event time. Pending time is null and is not included in allocation execution time.
+
+Accepted client-training intervals contained `1883612.6948749206 J` of gross device energy and `52380.5986610567 J` of idle-adjusted device energy. These client-interval totals are neither Slurm accounting quantities nor whole-allocation energy.
+
+The fitting and client-grouped selection collection used seeds 7 and 17; seed 27 remained outside fitting and model selection. The exported wall-time and gross-energy models are `event_structure` ridge models, and the stored JSON models reproduce their predictions. The scheduling model uses example count, batch count, raw input events, mean/median/maximum sequence length, valid and estimated padded time bins, padding fraction, and event density. Client identity and current-execution spike fields are absent.
+
+The spike decision is `spike_history_not_adopted`. SHD passed the median-improvement, tail-error, and rank conditions with median absolute runtime-error improvement fraction `0.3331679722893203`. SSC maintained rank but failed the median-improvement and tail-error conditions, with improvement fraction `-2.233354617899182`. Negligible prediction time and assignment closer to the measured oracle both passed, but the required benefit across both datasets did not.
+
+### Scientific interpretation
+
+The declared consistency gates passed, so the measurement and cost-estimation evidence is accepted. Event-structure features were selected for deployment-oriented prediction. Historical spike information helped the declared SHD runtime comparison but performed substantially worse in the declared SSC comparison, so it was not sufficiently robust across both evaluated datasets for adoption. This is valid dataset-dependent negative evidence rather than an execution failure.
+
+The [offline assignment evidence](../results/resource_measurement/assignment_readiness.json) evaluates process counts two and four without changing a production scheduling policy. The measured-cost oracle and the diagnostic current-execution oracle are unavailable before assignment. Consequently, the offline comparisons do not establish an end-to-end distributed speedup, production scheduling superiority, energy advantage, reduced billing, or behavior beyond these two datasets, these models, this hardware, and this execution.
 
 ## Centralized CIFAR-10 learning verification
 
