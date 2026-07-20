@@ -1,0 +1,11 @@
+mean_absolute_error_seconds,model,setting
+1.101120593827,constant,shd_to_ssc_transfer
+2.6295786012024776,size,shd_to_ssc_transfer
+0.8114480654068984,event_structure,shd_to_ssc_transfer
+0.09641492816808389,historical_spike,shd_to_ssc_transfer
+1.5431929903860964,diagnostic_oracle,shd_to_ssc_transfer
+0.872439579095,constant,ssc_to_shd_transfer
+0.6156863117107885,size,ssc_to_shd_transfer
+0.14468585138549325,event_structure,ssc_to_shd_transfer
+61.629432221811534,historical_spike,ssc_to_shd_transfer
+0.07266869005190471,diagnostic_oracle,ssc_to_shd_transfer

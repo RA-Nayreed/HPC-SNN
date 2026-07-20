@@ -1,0 +1,11 @@
+dataset,median_absolute_error_seconds,model
+shd,0.5649508759999999,constant
+ssc,0.5142956855,constant
+shd,0.059673647276199504,size
+ssc,0.08629442668652731,size
+shd,0.07027049376196515,event_structure
+ssc,0.06209416433775661,event_structure
+shd,0.04088364796993127,historical_spike
+ssc,0.03218091726004002,historical_spike
+shd,0.12312305529387013,diagnostic_oracle
+ssc,0.06842086281668758,diagnostic_oracle

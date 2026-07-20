@@ -1,0 +1,803 @@
+{
+  "records": [
+    {
+      "attempts": [
+        {
+          "artifact": {
+            "client_id": "client_00",
+            "dataset": "shd",
+            "gpu_uuids": [
+              "GPU-f50ec698-57aa-4b59-108c-fa678abbc391"
+            ],
+            "median_relative_overhead": 0.01713823842158517,
+            "minimum_samples_per_client": 10,
+            "observations": [
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.968818377,
+                "relative_overhead": -0.05331471319734627,
+                "repetition": 0,
+                "unmeasured_seconds": 1.023379565,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.005918598,
+                "relative_overhead": 0.025043944800381482,
+                "repetition": 1,
+                "unmeasured_seconds": 0.981341925,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.012919202,
+                "relative_overhead": 0.06435078400017362,
+                "repetition": 2,
+                "unmeasured_seconds": 0.951677978,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.001792999,
+                "relative_overhead": 0.011464494035981383,
+                "repetition": 3,
+                "unmeasured_seconds": 0.990438127,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.037544419,
+                "relative_overhead": 0.062173540350362,
+                "repetition": 4,
+                "unmeasured_seconds": 0.976812526,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.983372884,
+                "relative_overhead": -0.0644571884922546,
+                "repetition": 5,
+                "unmeasured_seconds": 1.051125477,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.026725824,
+                "relative_overhead": 0.022811982807188953,
+                "repetition": 6,
+                "unmeasured_seconds": 1.00382655,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.946180237,
+                "relative_overhead": -0.03310070948887384,
+                "repetition": 7,
+                "unmeasured_seconds": 0.978571653,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.957704517,
+                "relative_overhead": 0.03280319088503042,
+                "repetition": 8,
+                "unmeasured_seconds": 0.927286559,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.95509552,
+                "relative_overhead": -0.019949961782178983,
+                "repetition": 9,
+                "unmeasured_seconds": 0.974537506,
+                "updates_identical": true
+              }
+            ],
+            "official_test_access_count": 0,
+            "paired_repetitions": 10,
+            "passed": true,
+            "sample_coverage_fraction": 1.0,
+            "sample_record": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/calibration_device_samples.jsonl",
+            "sampling_errors": [],
+            "sampling_interval_ms": 100,
+            "schema_version": 1,
+            "training_data_only": true,
+            "updates_numerically_identical": true,
+            "validation_findings": [],
+            "warm_up_policy": {
+              "execution_order": [
+                "measured",
+                "unmeasured"
+              ],
+              "included_in_overhead_statistic": false,
+              "included_in_paired_observations": false,
+              "measured_executions": 1,
+              "state_restored_before_each_execution": true,
+              "unmeasured_executions": 1
+            }
+          },
+          "execution_attempt": 1,
+          "path": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/instrumentation_calibration.json",
+          "sha256": "973ef1d78dabee5a0a3914e3592d14d965c247c9cd210a01892c3fe92452652f"
+        }
+      ],
+      "schema_version": 1
+    },
+    {
+      "attempts": [
+        {
+          "artifact": {
+            "client_id": "client_00",
+            "dataset": "shd",
+            "gpu_uuids": [
+              "GPU-f50ec698-57aa-4b59-108c-fa678abbc391"
+            ],
+            "median_relative_overhead": 0.01713823842158517,
+            "minimum_samples_per_client": 10,
+            "observations": [
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.968818377,
+                "relative_overhead": -0.05331471319734627,
+                "repetition": 0,
+                "unmeasured_seconds": 1.023379565,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.005918598,
+                "relative_overhead": 0.025043944800381482,
+                "repetition": 1,
+                "unmeasured_seconds": 0.981341925,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.012919202,
+                "relative_overhead": 0.06435078400017362,
+                "repetition": 2,
+                "unmeasured_seconds": 0.951677978,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.001792999,
+                "relative_overhead": 0.011464494035981383,
+                "repetition": 3,
+                "unmeasured_seconds": 0.990438127,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.037544419,
+                "relative_overhead": 0.062173540350362,
+                "repetition": 4,
+                "unmeasured_seconds": 0.976812526,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.983372884,
+                "relative_overhead": -0.0644571884922546,
+                "repetition": 5,
+                "unmeasured_seconds": 1.051125477,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.026725824,
+                "relative_overhead": 0.022811982807188953,
+                "repetition": 6,
+                "unmeasured_seconds": 1.00382655,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.946180237,
+                "relative_overhead": -0.03310070948887384,
+                "repetition": 7,
+                "unmeasured_seconds": 0.978571653,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.957704517,
+                "relative_overhead": 0.03280319088503042,
+                "repetition": 8,
+                "unmeasured_seconds": 0.927286559,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.95509552,
+                "relative_overhead": -0.019949961782178983,
+                "repetition": 9,
+                "unmeasured_seconds": 0.974537506,
+                "updates_identical": true
+              }
+            ],
+            "official_test_access_count": 0,
+            "paired_repetitions": 10,
+            "passed": true,
+            "sample_coverage_fraction": 1.0,
+            "sample_record": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/calibration_device_samples.jsonl",
+            "sampling_errors": [],
+            "sampling_interval_ms": 100,
+            "schema_version": 1,
+            "training_data_only": true,
+            "updates_numerically_identical": true,
+            "validation_findings": [],
+            "warm_up_policy": {
+              "execution_order": [
+                "measured",
+                "unmeasured"
+              ],
+              "included_in_overhead_statistic": false,
+              "included_in_paired_observations": false,
+              "measured_executions": 1,
+              "state_restored_before_each_execution": true,
+              "unmeasured_executions": 1
+            }
+          },
+          "execution_attempt": 1,
+          "path": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/instrumentation_calibration.json",
+          "sha256": "973ef1d78dabee5a0a3914e3592d14d965c247c9cd210a01892c3fe92452652f"
+        }
+      ],
+      "schema_version": 1
+    },
+    {
+      "attempts": [
+        {
+          "artifact": {
+            "client_id": "client_00",
+            "dataset": "shd",
+            "gpu_uuids": [
+              "GPU-f50ec698-57aa-4b59-108c-fa678abbc391"
+            ],
+            "median_relative_overhead": 0.01713823842158517,
+            "minimum_samples_per_client": 10,
+            "observations": [
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.968818377,
+                "relative_overhead": -0.05331471319734627,
+                "repetition": 0,
+                "unmeasured_seconds": 1.023379565,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.005918598,
+                "relative_overhead": 0.025043944800381482,
+                "repetition": 1,
+                "unmeasured_seconds": 0.981341925,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.012919202,
+                "relative_overhead": 0.06435078400017362,
+                "repetition": 2,
+                "unmeasured_seconds": 0.951677978,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.001792999,
+                "relative_overhead": 0.011464494035981383,
+                "repetition": 3,
+                "unmeasured_seconds": 0.990438127,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.037544419,
+                "relative_overhead": 0.062173540350362,
+                "repetition": 4,
+                "unmeasured_seconds": 0.976812526,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.983372884,
+                "relative_overhead": -0.0644571884922546,
+                "repetition": 5,
+                "unmeasured_seconds": 1.051125477,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.026725824,
+                "relative_overhead": 0.022811982807188953,
+                "repetition": 6,
+                "unmeasured_seconds": 1.00382655,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.946180237,
+                "relative_overhead": -0.03310070948887384,
+                "repetition": 7,
+                "unmeasured_seconds": 0.978571653,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.957704517,
+                "relative_overhead": 0.03280319088503042,
+                "repetition": 8,
+                "unmeasured_seconds": 0.927286559,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.95509552,
+                "relative_overhead": -0.019949961782178983,
+                "repetition": 9,
+                "unmeasured_seconds": 0.974537506,
+                "updates_identical": true
+              }
+            ],
+            "official_test_access_count": 0,
+            "paired_repetitions": 10,
+            "passed": true,
+            "sample_coverage_fraction": 1.0,
+            "sample_record": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/calibration_device_samples.jsonl",
+            "sampling_errors": [],
+            "sampling_interval_ms": 100,
+            "schema_version": 1,
+            "training_data_only": true,
+            "updates_numerically_identical": true,
+            "validation_findings": [],
+            "warm_up_policy": {
+              "execution_order": [
+                "measured",
+                "unmeasured"
+              ],
+              "included_in_overhead_statistic": false,
+              "included_in_paired_observations": false,
+              "measured_executions": 1,
+              "state_restored_before_each_execution": true,
+              "unmeasured_executions": 1
+            }
+          },
+          "execution_attempt": 1,
+          "path": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/instrumentation_calibration.json",
+          "sha256": "973ef1d78dabee5a0a3914e3592d14d965c247c9cd210a01892c3fe92452652f"
+        }
+      ],
+      "schema_version": 1
+    },
+    {
+      "attempts": [
+        {
+          "artifact": {
+            "client_id": "client_00",
+            "dataset": "shd",
+            "gpu_uuids": [
+              "GPU-f50ec698-57aa-4b59-108c-fa678abbc391"
+            ],
+            "median_relative_overhead": 0.01713823842158517,
+            "minimum_samples_per_client": 10,
+            "observations": [
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.968818377,
+                "relative_overhead": -0.05331471319734627,
+                "repetition": 0,
+                "unmeasured_seconds": 1.023379565,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.005918598,
+                "relative_overhead": 0.025043944800381482,
+                "repetition": 1,
+                "unmeasured_seconds": 0.981341925,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.012919202,
+                "relative_overhead": 0.06435078400017362,
+                "repetition": 2,
+                "unmeasured_seconds": 0.951677978,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.001792999,
+                "relative_overhead": 0.011464494035981383,
+                "repetition": 3,
+                "unmeasured_seconds": 0.990438127,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.037544419,
+                "relative_overhead": 0.062173540350362,
+                "repetition": 4,
+                "unmeasured_seconds": 0.976812526,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.983372884,
+                "relative_overhead": -0.0644571884922546,
+                "repetition": 5,
+                "unmeasured_seconds": 1.051125477,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.026725824,
+                "relative_overhead": 0.022811982807188953,
+                "repetition": 6,
+                "unmeasured_seconds": 1.00382655,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.946180237,
+                "relative_overhead": -0.03310070948887384,
+                "repetition": 7,
+                "unmeasured_seconds": 0.978571653,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.957704517,
+                "relative_overhead": 0.03280319088503042,
+                "repetition": 8,
+                "unmeasured_seconds": 0.927286559,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.95509552,
+                "relative_overhead": -0.019949961782178983,
+                "repetition": 9,
+                "unmeasured_seconds": 0.974537506,
+                "updates_identical": true
+              }
+            ],
+            "official_test_access_count": 0,
+            "paired_repetitions": 10,
+            "passed": true,
+            "sample_coverage_fraction": 1.0,
+            "sample_record": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/calibration_device_samples.jsonl",
+            "sampling_errors": [],
+            "sampling_interval_ms": 100,
+            "schema_version": 1,
+            "training_data_only": true,
+            "updates_numerically_identical": true,
+            "validation_findings": [],
+            "warm_up_policy": {
+              "execution_order": [
+                "measured",
+                "unmeasured"
+              ],
+              "included_in_overhead_statistic": false,
+              "included_in_paired_observations": false,
+              "measured_executions": 1,
+              "state_restored_before_each_execution": true,
+              "unmeasured_executions": 1
+            }
+          },
+          "execution_attempt": 1,
+          "path": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/instrumentation_calibration.json",
+          "sha256": "973ef1d78dabee5a0a3914e3592d14d965c247c9cd210a01892c3fe92452652f"
+        }
+      ],
+      "schema_version": 1
+    },
+    {
+      "attempts": [
+        {
+          "artifact": {
+            "client_id": "client_00",
+            "dataset": "shd",
+            "gpu_uuids": [
+              "GPU-f50ec698-57aa-4b59-108c-fa678abbc391"
+            ],
+            "median_relative_overhead": 0.01713823842158517,
+            "minimum_samples_per_client": 10,
+            "observations": [
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.968818377,
+                "relative_overhead": -0.05331471319734627,
+                "repetition": 0,
+                "unmeasured_seconds": 1.023379565,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.005918598,
+                "relative_overhead": 0.025043944800381482,
+                "repetition": 1,
+                "unmeasured_seconds": 0.981341925,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.012919202,
+                "relative_overhead": 0.06435078400017362,
+                "repetition": 2,
+                "unmeasured_seconds": 0.951677978,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.001792999,
+                "relative_overhead": 0.011464494035981383,
+                "repetition": 3,
+                "unmeasured_seconds": 0.990438127,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.037544419,
+                "relative_overhead": 0.062173540350362,
+                "repetition": 4,
+                "unmeasured_seconds": 0.976812526,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.983372884,
+                "relative_overhead": -0.0644571884922546,
+                "repetition": 5,
+                "unmeasured_seconds": 1.051125477,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.026725824,
+                "relative_overhead": 0.022811982807188953,
+                "repetition": 6,
+                "unmeasured_seconds": 1.00382655,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.946180237,
+                "relative_overhead": -0.03310070948887384,
+                "repetition": 7,
+                "unmeasured_seconds": 0.978571653,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.957704517,
+                "relative_overhead": 0.03280319088503042,
+                "repetition": 8,
+                "unmeasured_seconds": 0.927286559,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.95509552,
+                "relative_overhead": -0.019949961782178983,
+                "repetition": 9,
+                "unmeasured_seconds": 0.974537506,
+                "updates_identical": true
+              }
+            ],
+            "official_test_access_count": 0,
+            "paired_repetitions": 10,
+            "passed": true,
+            "sample_coverage_fraction": 1.0,
+            "sample_record": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/calibration_device_samples.jsonl",
+            "sampling_errors": [],
+            "sampling_interval_ms": 100,
+            "schema_version": 1,
+            "training_data_only": true,
+            "updates_numerically_identical": true,
+            "validation_findings": [],
+            "warm_up_policy": {
+              "execution_order": [
+                "measured",
+                "unmeasured"
+              ],
+              "included_in_overhead_statistic": false,
+              "included_in_paired_observations": false,
+              "measured_executions": 1,
+              "state_restored_before_each_execution": true,
+              "unmeasured_executions": 1
+            }
+          },
+          "execution_attempt": 1,
+          "path": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/instrumentation_calibration.json",
+          "sha256": "973ef1d78dabee5a0a3914e3592d14d965c247c9cd210a01892c3fe92452652f"
+        }
+      ],
+      "schema_version": 1
+    },
+    {
+      "attempts": [
+        {
+          "artifact": {
+            "client_id": "client_00",
+            "dataset": "shd",
+            "gpu_uuids": [
+              "GPU-f50ec698-57aa-4b59-108c-fa678abbc391"
+            ],
+            "median_relative_overhead": 0.01713823842158517,
+            "minimum_samples_per_client": 10,
+            "observations": [
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.968818377,
+                "relative_overhead": -0.05331471319734627,
+                "repetition": 0,
+                "unmeasured_seconds": 1.023379565,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.005918598,
+                "relative_overhead": 0.025043944800381482,
+                "repetition": 1,
+                "unmeasured_seconds": 0.981341925,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.012919202,
+                "relative_overhead": 0.06435078400017362,
+                "repetition": 2,
+                "unmeasured_seconds": 0.951677978,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.001792999,
+                "relative_overhead": 0.011464494035981383,
+                "repetition": 3,
+                "unmeasured_seconds": 0.990438127,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.037544419,
+                "relative_overhead": 0.062173540350362,
+                "repetition": 4,
+                "unmeasured_seconds": 0.976812526,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.983372884,
+                "relative_overhead": -0.0644571884922546,
+                "repetition": 5,
+                "unmeasured_seconds": 1.051125477,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 11,
+                "measured_seconds": 1.026725824,
+                "relative_overhead": 0.022811982807188953,
+                "repetition": 6,
+                "unmeasured_seconds": 1.00382655,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.946180237,
+                "relative_overhead": -0.03310070948887384,
+                "repetition": 7,
+                "unmeasured_seconds": 0.978571653,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "measured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.957704517,
+                "relative_overhead": 0.03280319088503042,
+                "repetition": 8,
+                "unmeasured_seconds": 0.927286559,
+                "updates_identical": true
+              },
+              {
+                "first_condition": "unmeasured",
+                "measured_sample_count": 10,
+                "measured_seconds": 0.95509552,
+                "relative_overhead": -0.019949961782178983,
+                "repetition": 9,
+                "unmeasured_seconds": 0.974537506,
+                "updates_identical": true
+              }
+            ],
+            "official_test_access_count": 0,
+            "paired_repetitions": 10,
+            "passed": true,
+            "sample_coverage_fraction": 1.0,
+            "sample_record": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/calibration_device_samples.jsonl",
+            "sampling_errors": [],
+            "sampling_interval_ms": 100,
+            "schema_version": 1,
+            "training_data_only": true,
+            "updates_numerically_identical": true,
+            "validation_findings": [],
+            "warm_up_policy": {
+              "execution_order": [
+                "measured",
+                "unmeasured"
+              ],
+              "included_in_overhead_statistic": false,
+              "included_in_paired_observations": false,
+              "measured_executions": 1,
+              "state_restored_before_each_execution": true,
+              "unmeasured_executions": 1
+            }
+          },
+          "execution_attempt": 1,
+          "path": "/scratch/project_2015302/rnayreed/hpc-snn/results/resource_measurement/calibration/291481/instrumentation_calibration.json",
+          "sha256": "973ef1d78dabee5a0a3914e3592d14d965c247c9cd210a01892c3fe92452652f"
+        }
+      ],
+      "schema_version": 1
+    }
+  ],
+  "schema_version": 1
+}

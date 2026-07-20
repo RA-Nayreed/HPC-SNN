@@ -1,0 +1,2 @@
+JobID|State|ExitCode|ElapsedRaw|AllocTRES|Start|End
+291481|COMPLETED|0:0|34051|billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1|2026-07-19T20:11:09|2026-07-20T05:38:40

@@ -1,0 +1,152 @@
+{
+  "accepted_client_record_count": 6000,
+  "calibration_passed": true,
+  "collection": "resource_measurement",
+  "completed_run_count": 6,
+  "datasets": {
+    "shd": 3,
+    "ssc": 3
+  },
+  "energy_integration_complete": true,
+  "git_commit": "3ddae173c89125bc69922d80bde5732ed6cd050e",
+  "metrics_finite": true,
+  "model_json_roundtrip_verified": true,
+  "official_test_access_exactly_once": true,
+  "power_coverage_complete": true,
+  "resource_totals": {
+    "allocated_gpu_hours": 9.45861111111111,
+    "client_wall_time_seconds": 11457.10155192,
+    "cuda_event_time_seconds": 8159.062962005615,
+    "gross_device_energy_joules": 1883612.6948749206,
+    "idle_adjusted_device_energy_joules": 52380.5986610567,
+    "internal_execution_time_seconds": 33217.69320165331,
+    "pending_time_included_in_execution_allocation": false,
+    "pending_time_seconds": null,
+    "slurm_allocation_elapsed_seconds": 34051
+  },
+  "runs": [
+    {
+      "client_record_count": 1000,
+      "client_wall_time_seconds": 1373.212066732,
+      "cuda_event_time_seconds": 1205.274860939026,
+      "dataset": "shd",
+      "gross_energy_joules": 222467.1850438589,
+      "idle_adjusted_energy_joules": 3071.4136503444015,
+      "internal_execution_time_seconds": 2064.5288088772213,
+      "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/resource_measurement/shd_lif_client_resource-seed17-241db9ab",
+      "scientific_seed": 17,
+      "slurm_allocation_id": "291481",
+      "slurm_allocation_ids": [
+        "291481"
+      ]
+    },
+    {
+      "client_record_count": 1000,
+      "client_wall_time_seconds": 1430.063606405,
+      "cuda_event_time_seconds": 1262.6056069602967,
+      "dataset": "shd",
+      "gross_energy_joules": 231701.10518099155,
+      "idle_adjusted_energy_joules": 2964.2536725687632,
+      "internal_execution_time_seconds": 2132.0926596346544,
+      "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/resource_measurement/shd_lif_client_resource-seed27-c7ddd93a",
+      "scientific_seed": 27,
+      "slurm_allocation_id": "291481",
+      "slurm_allocation_ids": [
+        "291481"
+      ]
+    },
+    {
+      "client_record_count": 1000,
+      "client_wall_time_seconds": 1347.072477339,
+      "cuda_event_time_seconds": 1179.1335129432678,
+      "dataset": "shd",
+      "gross_energy_joules": 218183.40788355345,
+      "idle_adjusted_energy_joules": 3322.7407473576236,
+      "internal_execution_time_seconds": 2040.813377056038,
+      "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/resource_measurement/shd_lif_client_resource-seed7-0c65504c",
+      "scientific_seed": 7,
+      "slurm_allocation_id": "291481",
+      "slurm_allocation_ids": [
+        "291481"
+      ]
+    },
+    {
+      "client_record_count": 1000,
+      "client_wall_time_seconds": 2413.011474932,
+      "cuda_event_time_seconds": 1467.6087600479127,
+      "dataset": "ssc",
+      "gross_energy_joules": 400205.4943967287,
+      "idle_adjusted_energy_joules": 14585.120256270595,
+      "internal_execution_time_seconds": 8991.110143224243,
+      "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/resource_measurement/ssc_lif_128_client_resource-seed17-5979e7a5",
+      "scientific_seed": 17,
+      "slurm_allocation_id": "291481",
+      "slurm_allocation_ids": [
+        "291481"
+      ]
+    },
+    {
+      "client_record_count": 1000,
+      "client_wall_time_seconds": 2475.401142327,
+      "cuda_event_time_seconds": 1555.5105671463014,
+      "dataset": "ssc",
+      "gross_energy_joules": 410220.6191966648,
+      "idle_adjusted_energy_joules": 14130.676037046904,
+      "internal_execution_time_seconds": 9048.601795485592,
+      "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/resource_measurement/ssc_lif_128_client_resource-seed27-72fc789b",
+      "scientific_seed": 27,
+      "slurm_allocation_id": "291481",
+      "slurm_allocation_ids": [
+        "291481"
+      ]
+    },
+    {
+      "client_record_count": 1000,
+      "client_wall_time_seconds": 2418.340784185,
+      "cuda_event_time_seconds": 1488.929653968811,
+      "dataset": "ssc",
+      "gross_energy_joules": 400834.88317312335,
+      "idle_adjusted_energy_joules": 14306.394297468409,
+      "internal_execution_time_seconds": 8940.54641737556,
+      "run_directory": "/scratch/project_2015302/rnayreed/hpc-snn/runs/resource_measurement/ssc_lif_128_client_resource-seed7-9dea723e",
+      "scientific_seed": 7,
+      "slurm_allocation_id": "291481",
+      "slurm_allocation_ids": [
+        "291481"
+      ]
+    }
+  ],
+  "schema_version": 1,
+  "scientific_interpretation": "descriptive_evidence",
+  "seeds": [
+    7,
+    17,
+    27
+  ],
+  "slurm_accounting": {
+    "allocated_gpu_hours": 9.45861111111111,
+    "allocation_ids": [
+      "291481"
+    ],
+    "allocation_records": [
+      {
+        "allocated_gpu_count": 1,
+        "allocated_gpu_hours": 9.45861111111111,
+        "allocated_tres": "billing=72,cpu=72,gres/gpu:gh200=1,mem=217086M,node=1",
+        "elapsed_seconds": 34051,
+        "end": "2026-07-20T05:38:40",
+        "exit_code": "0:0",
+        "job_id": "291481",
+        "resumable_interruption": false,
+        "start": "2026-07-19T20:11:09",
+        "state": "COMPLETED"
+      }
+    ],
+    "device_energy_inferred_from_allocation": false,
+    "elapsed_seconds": 34051,
+    "pending_time_seconds": null,
+    "source_sha256": "c3f0d60b620804c2ebb223932fcdd7ed3ae6667a3fcfc8b753a7e0bfbd6c9fbe"
+  },
+  "timing_records_complete": true,
+  "valid": true
+}
