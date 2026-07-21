@@ -17,6 +17,7 @@ from fedapfa.utilities.run_records import run_directory
 SCHEDULING = "experiments/scheduling_evaluation/manifest.yaml"
 HIERARCHY = "experiments/hierarchical_reduction_evaluation/manifest.yaml"
 COMMIT = "1" * 40
+GPU_UUIDS = tuple(f"{value:08x}-0000-4000-8000-000000000000" for value in range(1, 5))
 
 
 def _tasks(manifest, root):
@@ -188,7 +189,7 @@ def _write_run(task, root, collection, allocation_index):
         {
             "rank": rank,
             "host": f"node-{rank // 2}" if collection == "hierarchical_reduction_evaluation" else "node-0",
-            "gpu_uuid": f"gpu-{rank}",
+            "gpu_uuid": GPU_UUIDS[rank],
             "node_rank": rank // (2 if collection == "hierarchical_reduction_evaluation" else 4),
             "local_rank": rank % (2 if collection == "hierarchical_reduction_evaluation" else 4),
             "device_index": rank % (2 if collection == "hierarchical_reduction_evaluation" else 4),
@@ -216,7 +217,7 @@ def _write_run(task, root, collection, allocation_index):
         "mps_active_thread_percentage": None,
         "within_allocation_execution_order": ",".join(expected_order),
         "treatment_position": str(treatment_position + 1),
-        "allocated_gpu_uuids": "gpu-0,gpu-1,gpu-2,gpu-3",
+        "allocated_gpu_uuids": ",".join(f"GPU-{value}" for value in GPU_UUIDS),
     }
     measurements = {
         "completed": True,

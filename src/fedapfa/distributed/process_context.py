@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import socket
+import uuid
 from dataclasses import asdict, dataclass
 from datetime import timedelta
 
@@ -46,6 +47,7 @@ class ProcessContext:
     node_group_ranks: tuple[int, ...]
     node_leader_ranks: tuple[int, ...]
     gpu_uuid: str | None
+    gpu_uuid_raw: str | None
 
     @property
     def is_coordinator(self) -> bool:
@@ -73,14 +75,38 @@ def _environment_integer(name: str) -> int:
         raise RuntimeError(f"torchrun environment variable {name} must be an integer") from error
 
 
+def canonical_gpu_uuid(value: str) -> str:
+    """Return one stable identity for full-GPU UUIDs from CUDA or nvidia-smi."""
+
+    if not isinstance(value, str):
+        raise ValueError("GPU UUID must be a string")
+    candidate = value.strip()
+    if not candidate:
+        raise ValueError("GPU UUID must not be empty")
+    if candidate.casefold().startswith("mig-"):
+        raise ValueError("MIG UUIDs are not permitted for exclusive full-GPU execution")
+    if candidate[:4].casefold() == "gpu-":
+        candidate = candidate[4:]
+    if candidate.casefold().startswith("mig-"):
+        raise ValueError("MIG UUIDs are not permitted for exclusive full-GPU execution")
+    try:
+        return str(uuid.UUID(candidate))
+    except (AttributeError, ValueError) as error:
+        raise ValueError("GPU UUID is malformed") from error
+
+
 def allocated_gpu_uuids(value: str | None, *, expected_count: int) -> tuple[str, ...]:
     """Parse an exact, nonempty, distinct allocation-level GPU UUID set."""
 
     if value is None:
         raise RuntimeError("FEDAPFA_ALLOCATED_GPU_UUIDS must enumerate the allocated GPUs")
-    values = tuple(item.strip() for item in value.split(","))
-    if len(values) != expected_count or any(not item for item in values):
+    raw_values = tuple(value.split(","))
+    if len(raw_values) != expected_count:
         raise RuntimeError(f"allocated GPU UUID evidence must contain exactly {expected_count} values")
+    try:
+        values = tuple(canonical_gpu_uuid(item) for item in raw_values)
+    except ValueError as error:
+        raise RuntimeError(f"allocated GPU UUID evidence is invalid: {error}") from error
     if len(set(values)) != expected_count:
         raise RuntimeError("allocated GPU UUID evidence contains duplicate devices")
     return values
@@ -97,12 +123,27 @@ def validate_process_gpu_uuid_mapping(
 ) -> list[dict]:
     """Validate the exact exclusive rank-to-device-to-UUID allocation mapping."""
 
-    if len(allocation_uuids) != world_size or len(set(allocation_uuids)) != world_size:
+    try:
+        canonical_allocation = tuple(canonical_gpu_uuid(value) for value in allocation_uuids)
+    except ValueError as error:
+        raise RuntimeError(f"allocated GPU UUID evidence is invalid: {error}") from error
+    if len(canonical_allocation) != world_size or len(set(canonical_allocation)) != world_size:
         raise RuntimeError("exclusive NCCL execution requires one distinct allocated GPU UUID per rank")
     if len(records) != world_size or {value.get("rank") for value in records} != set(range(world_size)):
         raise RuntimeError("process-to-GPU UUID mapping is incomplete")
     ordered = sorted(records, key=lambda value: value["rank"])
+    canonical_records = []
     for value in ordered:
+        raw_uuid = value.get("gpu_uuid_raw", value.get("gpu_uuid"))
+        try:
+            canonical_uuid = canonical_gpu_uuid(raw_uuid)
+        except ValueError as error:
+            raise RuntimeError("every NCCL process must report a valid full-GPU UUID") from error
+        canonical_record = dict(value)
+        canonical_record["gpu_uuid_raw"] = raw_uuid
+        canonical_record["gpu_uuid"] = canonical_uuid
+        canonical_records.append(canonical_record)
+    for value in canonical_records:
         rank = value["rank"]
         expected_local_rank = rank % local_world_size
         if (
@@ -111,16 +152,100 @@ def validate_process_gpu_uuid_mapping(
             or value.get("device_index") != expected_local_rank
         ):
             raise RuntimeError("process-to-GPU UUID mapping differs from node-major exclusive-device mapping")
-    observed = [value.get("gpu_uuid") for value in ordered]
-    if any(not isinstance(value, str) or not value for value in observed):
-        raise RuntimeError("every NCCL process must report a nonempty GPU UUID")
+    observed = [value["gpu_uuid"] for value in canonical_records]
     if len(set(observed)) != world_size:
         raise RuntimeError("multiple NCCL processes map to the same GPU UUID")
-    if set(observed) != set(allocation_uuids):
-        raise RuntimeError("process GPU UUIDs do not match the exact allocated GPU UUID set")
+    if set(observed) != set(canonical_allocation):
+        missing = sorted(set(canonical_allocation) - set(observed))
+        unexpected = sorted(set(observed) - set(canonical_allocation))
+        raise RuntimeError(
+            "process GPU UUIDs do not match the exact allocated GPU UUID set: "
+            f"missing={missing}, unexpected={unexpected}"
+        )
     if node_count * devices_per_node != world_size:
         raise RuntimeError("GPU UUID mapping topology does not cover the configured physical devices")
-    return ordered
+    for node_rank in range(node_count):
+        node_uuids = {
+            value["gpu_uuid"] for value in canonical_records if value["node_rank"] == node_rank
+        }
+        if len(node_uuids) != devices_per_node:
+            raise RuntimeError("each node must map to its configured number of distinct GPU UUIDs")
+    return canonical_records
+
+
+def _destroy_process_groups() -> None:
+    """Best-effort teardown that never masks an initialization failure."""
+
+    groups = list(reversed(list(_PROCESS_GROUPS.values())))
+    _PROCESS_GROUPS.clear()
+    if not dist.is_initialized():
+        return
+    destroyed_ids: set[int] = set()
+    for group in groups:
+        if group is None or id(group) in destroyed_ids:
+            continue
+        destroyed_ids.add(id(group))
+        try:
+            dist.destroy_process_group(group)
+        except Exception:
+            pass
+    try:
+        if dist.is_initialized():
+            dist.destroy_process_group()
+    except Exception:
+        pass
+
+
+def _validate_initialized_process_context(
+    context: ProcessContext,
+    *,
+    allow_gloo: bool,
+) -> None:
+    if dist.get_rank() != context.rank or dist.get_world_size() != context.world_size:
+        raise RuntimeError("initialized process-group identity is incompatible with torchrun")
+    for group_node_rank in range(context.node_count):
+        ranks = tuple(
+            range(
+                group_node_rank * context.local_world_size,
+                (group_node_rank + 1) * context.local_world_size,
+            )
+        )
+        _PROCESS_GROUPS[("node", ranks)] = dist.new_group(ranks=list(ranks))
+    _PROCESS_GROUPS[("leaders", context.node_leader_ranks)] = dist.new_group(
+        ranks=list(context.node_leader_ranks)
+    )
+    hosts: list[str | None] = [None for _ in range(context.world_size)]
+    dist.all_gather_object(hosts, context.host)
+    host_values = [str(value) for value in hosts]
+    synthetic_same_host_nodes = allow_gloo and context.node_count > 1 and len(set(host_values)) == 1
+    if len(set(host_values)) != context.node_count and not synthetic_same_host_nodes:
+        raise RuntimeError("distributed execution host count differs from configured node count")
+    for group_node_rank in range(context.node_count):
+        first = group_node_rank * context.local_world_size
+        if len(set(host_values[first : first + context.local_world_size])) != 1:
+            raise RuntimeError("one configured node rank spans multiple hostnames")
+    if context.backend == "nccl":
+        local_mapping = {
+            "rank": context.rank,
+            "node_rank": context.node_rank,
+            "local_rank": context.local_rank,
+            "device_index": context.device_index,
+            "gpu_uuid": context.gpu_uuid,
+            "gpu_uuid_raw": context.gpu_uuid_raw,
+        }
+        gathered_mappings: list[dict | None] = [None for _ in range(context.world_size)]
+        dist.all_gather_object(gathered_mappings, local_mapping)
+        validate_process_gpu_uuid_mapping(
+            [value for value in gathered_mappings if value is not None],
+            allocated_gpu_uuids(
+                os.environ.get("FEDAPFA_ALLOCATED_GPU_UUIDS"),
+                expected_count=context.physical_device_count,
+            ),
+            world_size=context.world_size,
+            node_count=context.node_count,
+            devices_per_node=context.devices_per_node,
+            local_world_size=context.local_world_size,
+        )
 
 
 def initialize_process_context(parallel: dict, *, allow_gloo: bool = False) -> ProcessContext:
@@ -154,6 +279,7 @@ def initialize_process_context(parallel: dict, *, allow_gloo: bool = False) -> P
     backend = str(parallel["control_backend"])
     service = str(parallel["cuda_process_service"])
     use_cuda = backend == "nccl" or service == "mps"
+    gpu_uuid_raw = None
     if use_cuda:
         if not torch.cuda.is_available():
             raise RuntimeError("distributed CUDA execution requires CUDA")
@@ -168,9 +294,9 @@ def initialize_process_context(parallel: dict, *, allow_gloo: bool = False) -> P
         device_name = properties.name
         device_total_memory = properties.total_memory
         device_capability = torch.cuda.get_device_capability(device)
-        gpu_uuid = getattr(properties, "uuid", None)
-        if gpu_uuid is not None:
-            gpu_uuid = str(gpu_uuid)
+        property_uuid = getattr(properties, "uuid", None)
+        gpu_uuid_raw = None if property_uuid is None else str(property_uuid)
+        gpu_uuid = None if gpu_uuid_raw is None else canonical_gpu_uuid(gpu_uuid_raw)
     elif backend == "gloo" and allow_gloo:
         visible_count = 0
         device = torch.device("cpu")
@@ -190,25 +316,8 @@ def initialize_process_context(parallel: dict, *, allow_gloo: bool = False) -> P
         control_device = torch.device("cpu")
     else:
         raise RuntimeError(f"unsupported distributed control backend: {backend}")
-    dist.init_process_group(
-        backend=backend,
-        rank=rank,
-        world_size=world_size,
-        timeout=timedelta(hours=36),
-    )
-    if dist.get_rank() != rank or dist.get_world_size() != world_size:
-        raise RuntimeError("initialized process-group identity is incompatible with torchrun")
     node_group_ranks = tuple(range(node_rank * local_world_size, (node_rank + 1) * local_world_size))
     node_leader_ranks = tuple(value * local_world_size for value in range(nodes))
-    for group_node_rank in range(nodes):
-        ranks = tuple(
-            range(
-                group_node_rank * local_world_size,
-                (group_node_rank + 1) * local_world_size,
-            )
-        )
-        _PROCESS_GROUPS[("node", ranks)] = dist.new_group(ranks=list(ranks))
-    _PROCESS_GROUPS[("leaders", node_leader_ranks)] = dist.new_group(ranks=list(node_leader_ranks))
     context = ProcessContext(
         rank=rank,
         local_rank=local_rank,
@@ -234,35 +343,20 @@ def initialize_process_context(parallel: dict, *, allow_gloo: bool = False) -> P
         node_group_ranks=node_group_ranks,
         node_leader_ranks=node_leader_ranks,
         gpu_uuid=gpu_uuid,
+        gpu_uuid_raw=gpu_uuid_raw,
     )
-    hosts: list[str | None] = [None for _ in range(world_size)]
-    dist.all_gather_object(hosts, context.host)
-    host_values = [str(value) for value in hosts]
-    synthetic_same_host_nodes = allow_gloo and nodes > 1 and len(set(host_values)) == 1
-    if len(set(host_values)) != nodes and not synthetic_same_host_nodes:
-        raise RuntimeError("distributed execution host count differs from configured node count")
-    for group_node_rank in range(nodes):
-        first = group_node_rank * local_world_size
-        if len(set(host_values[first : first + local_world_size])) != 1:
-            raise RuntimeError("one configured node rank spans multiple hostnames")
-    if backend == "nccl":
-        local_mapping = {
-            "rank": context.rank,
-            "node_rank": context.node_rank,
-            "local_rank": context.local_rank,
-            "device_index": context.device_index,
-            "gpu_uuid": context.gpu_uuid,
-        }
-        gathered_mappings: list[dict | None] = [None for _ in range(world_size)]
-        dist.all_gather_object(gathered_mappings, local_mapping)
-        validate_process_gpu_uuid_mapping(
-            [value for value in gathered_mappings if value is not None],
-            allocated_gpu_uuids(os.environ.get("FEDAPFA_ALLOCATED_GPU_UUIDS"), expected_count=devices),
-            world_size=world_size,
-            node_count=nodes,
-            devices_per_node=devices_per_node,
-            local_world_size=local_world_size,
-        )
+    _PROCESS_GROUPS.clear()
+    dist.init_process_group(
+        backend=backend,
+        rank=rank,
+        world_size=world_size,
+        timeout=timedelta(hours=36),
+    )
+    try:
+        _validate_initialized_process_context(context, allow_gloo=allow_gloo)
+    except BaseException:
+        _destroy_process_groups()
+        raise
     return context
 
 
@@ -319,6 +413,4 @@ def verify_identity_consensus(
 
 
 def close_process_context() -> None:
-    if dist.is_initialized():
-        dist.destroy_process_group()
-    _PROCESS_GROUPS.clear()
+    _destroy_process_groups()

@@ -58,6 +58,7 @@ from fedapfa.federated.fedavg import aggregate_client_results
 from fedapfa.federated.randomness import derive_seed
 from fedapfa.federated.round_state import AggregationInput, RoundResult
 from fedapfa.federated.server import global_model_norm, validate_global_model
+from fedapfa.measurement.gpu_telemetry import hierarchical_gpu_utilization_record
 from fedapfa.metrics.client_fairness import fairness_proxy_record
 from fedapfa.scheduling.runtime import SchedulerRuntime
 from fedapfa.training.federated import (
@@ -103,6 +104,7 @@ def _stable_process_mapping(process_records: list[dict]) -> list[dict]:
         "process_resident_memory_after_workload_bytes",
         "workload_resident_memory_delta_bytes",
         "gpu_uuid",
+        "gpu_uuid_raw",
     }
     return [
         {key: value for key, value in process_record.items() if key not in excluded}
@@ -194,8 +196,20 @@ def _gpu_utilization_record(telemetry_path: str | None) -> dict | None:
     }
 
 
-def _required_gpu_utilization_record(config: dict, telemetry_path: str | None) -> dict:
-    utilization = _gpu_utilization_record(telemetry_path)
+def _required_gpu_utilization_record(
+    config: dict,
+    telemetry_path: str | None,
+    *,
+    node_telemetry_paths: str | None = None,
+    allocated_uuid_text: str | None = None,
+) -> dict:
+    if node_telemetry_paths is None:
+        utilization = _gpu_utilization_record(telemetry_path)
+    else:
+        paths = [value.strip() for value in node_telemetry_paths.split(",")]
+        if len(paths) != 2 or any(not value for value in paths) or allocated_uuid_text is None:
+            raise RuntimeError("hierarchical telemetry node-file provenance is incomplete")
+        utilization = hierarchical_gpu_utilization_record(paths, allocated_uuid_text)
     if utilization is None:
         raise RuntimeError("configured physical-device utilization measurements are unavailable")
     expected_devices = {str(value) for value in range(config["parallel_execution"]["device_count"])}
@@ -374,10 +388,16 @@ def train_distributed_federated(
             "partition": os.environ.get("SLURM_JOB_PARTITION"),
             "allocated_gpus_on_node": os.environ.get("SLURM_GPUS_ON_NODE"),
             "allocated_gpu_uuids": os.environ.get("FEDAPFA_ALLOCATED_GPU_UUIDS"),
+            "allocated_gpu_uuids_raw": os.environ.get("FEDAPFA_ALLOCATED_GPU_UUIDS_RAW"),
             "allocated_nodes": os.environ.get("SLURM_JOB_NUM_NODES"),
             "node_list": os.environ.get("SLURM_JOB_NODELIST"),
             "cpus_per_task": os.environ.get("SLURM_CPUS_PER_TASK"),
             "gpu_telemetry_path": os.environ.get("FEDAPFA_GPU_TELEMETRY"),
+            "gpu_telemetry_node_files": (
+                os.environ["FEDAPFA_GPU_TELEMETRY_NODE_FILES"].split(",")
+                if os.environ.get("FEDAPFA_GPU_TELEMETRY_NODE_FILES")
+                else None
+            ),
             "mps_log_archive": os.environ.get("FEDAPFA_MPS_ARCHIVE"),
             "mps_active_thread_percentage": os.environ.get("FEDAPFA_MPS_ACTIVE_THREAD_PERCENTAGE"),
             "within_allocation_execution_order": os.environ.get("FEDAPFA_ALLOCATION_EXECUTION_ORDER"),
@@ -1161,7 +1181,12 @@ def train_distributed_federated(
     if checkpoint_selection == "best_validation" and best_round is None:
         raise RuntimeError("best-validation selection completed without a validation result")
     if config["execution_measurement"]["record_device_utilization"]:
-        utilization = _required_gpu_utilization_record(config, os.environ.get("FEDAPFA_GPU_TELEMETRY"))
+        utilization = _required_gpu_utilization_record(
+            config,
+            os.environ.get("FEDAPFA_GPU_TELEMETRY"),
+            node_telemetry_paths=os.environ.get("FEDAPFA_GPU_TELEMETRY_NODE_FILES"),
+            allocated_uuid_text=os.environ.get("FEDAPFA_ALLOCATED_GPU_UUIDS"),
+        )
         utilization["execution_attempt"] = measurements["resume_count"] + 1
         utilization["scope"] = "latest_execution_attempt"
         measurements["gpu_utilization"] = utilization

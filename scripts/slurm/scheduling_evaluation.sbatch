@@ -34,16 +34,16 @@ visible="$(${python_bin} -c 'import torch; assert torch.cuda.is_available(); pri
 [[ "${visible}" == 4 ]] || { echo "scheduling allocation requires four visible CUDA devices" >&2; exit 2; }
 mapfile -t allocated_gpu_uuids < <(nvidia-smi --query-gpu=uuid --format=csv,noheader,nounits)
 [[ "${#allocated_gpu_uuids[@]}" == 4 ]] || { echo "scheduling allocation must expose exactly four GPU UUIDs" >&2; exit 2; }
-for uuid in "${allocated_gpu_uuids[@]}"; do
-    [[ -n "${uuid//[[:space:]]/}" ]] || { echo "scheduling allocation contains an empty GPU UUID" >&2; exit 2; }
-done
-[[ "$(printf '%s\n' "${allocated_gpu_uuids[@]}" | sort -u | wc -l)" == 4 ]] || {
-    echo "scheduling allocation GPU UUIDs must be nonempty and distinct" >&2
-    exit 2
-}
-export FEDAPFA_ALLOCATED_GPU_UUIDS="$(IFS=,; printf '%s' "${allocated_gpu_uuids[*]}")"
+export FEDAPFA_ALLOCATED_GPU_UUIDS_RAW="$(IFS=,; printf '%s' "${allocated_gpu_uuids[*]}")"
+export FEDAPFA_ALLOCATED_GPU_UUIDS="$("${python_bin}" -c '
+import sys
+from fedapfa.distributed.process_context import allocated_gpu_uuids
+print(",".join(allocated_gpu_uuids(sys.argv[1], expected_count=4)))
+' "${FEDAPFA_ALLOCATED_GPU_UUIDS_RAW}")"
 unset CUDA_MPS_PIPE_DIRECTORY CUDA_MPS_LOG_DIRECTORY CUDA_MPS_ACTIVE_THREAD_PERCENTAGE
-export OMP_NUM_THREADS=72 NCCL_ASYNC_ERROR_HANDLING=1 NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
+unset FEDAPFA_GPU_TELEMETRY_NODE_FILES
+unset NCCL_ASYNC_ERROR_HANDLING
+export OMP_NUM_THREADS=72 TORCH_NCCL_ASYNC_ERROR_HANDLING=1 NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
 export FEDAPFA_ALLOCATION_EXECUTION_ORDER="${treatment_1},${treatment_2},${treatment_3}"
 treatments=("${treatment_1}" "${treatment_2}" "${treatment_3}")
 configs=("${config_1}" "${config_2}" "${config_3}")

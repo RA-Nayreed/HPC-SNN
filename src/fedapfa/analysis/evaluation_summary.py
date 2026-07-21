@@ -17,7 +17,7 @@ from fedapfa.configuration import (
     load_evaluation_manifest,
     validate_resolved_evaluation_pair,
 )
-from fedapfa.distributed.process_context import allocated_gpu_uuids
+from fedapfa.distributed.process_context import allocated_gpu_uuids, canonical_gpu_uuid
 from fedapfa.federated.checkpointing import configuration_identity
 from fedapfa.federated.aggregation import aggregation_tensor_policy
 from fedapfa.federated.numerical_equivalence import classify_model_states, prediction_identity
@@ -266,13 +266,20 @@ def _load_run(task, root: Path, collection: str) -> dict:
     except RuntimeError as error:
         raise ValueError("allocation GPU UUID provenance is incomplete") from error
     devices_per_node = task.config["parallel_execution"]["devices_per_node"]
+    try:
+        process_uuids = [
+            canonical_gpu_uuid(value.get("gpu_uuid"))
+            for value in process_mapping
+        ]
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ValueError("hardware process mapping or GPU UUID provenance is incomplete") from error
     if (
         not isinstance(process_mapping, list)
         or len(process_mapping) != process_count
         or {value.get("rank") for value in process_mapping} != set(range(process_count))
         or any(not value.get("host") or not value.get("gpu_uuid") for value in process_mapping)
-        or len({value["gpu_uuid"] for value in process_mapping}) != 4
-        or {value["gpu_uuid"] for value in process_mapping} != set(allocation_uuids)
+        or len(set(process_uuids)) != 4
+        or set(process_uuids) != set(allocation_uuids)
     ):
         raise ValueError("hardware process mapping or GPU UUID provenance is incomplete")
     for value in process_mapping:
