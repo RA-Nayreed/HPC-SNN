@@ -1,0 +1,35 @@
+schema_version: 1
+collection: hierarchical_reduction_evaluation
+seeds_file: seeds.yaml
+experiments:
+  - id: shd_lif_fedavg_flat_ordered
+    config: shd/lif_fedavg_flat_ordered.yaml
+    mandatory: true
+  - id: shd_lif_fedavg_node_hierarchical
+    config: shd/lif_fedavg_node_hierarchical.yaml
+    mandatory: true
+  - id: ssc_lif_128_fedavg_flat_ordered
+    config: ssc/lif_128_fedavg_flat_ordered.yaml
+    mandatory: true
+  - id: ssc_lif_128_fedavg_node_hierarchical
+    config: ssc/lif_128_fedavg_node_hierarchical.yaml
+    mandatory: true
+allocations:
+  - dataset: shd
+    seed: 37
+    execution_order: [flat_ordered, node_hierarchical]
+  - dataset: shd
+    seed: 47
+    execution_order: [node_hierarchical, flat_ordered]
+  - dataset: shd
+    seed: 57
+    execution_order: [flat_ordered, node_hierarchical]
+  - dataset: ssc
+    seed: 37
+    execution_order: [flat_ordered, node_hierarchical]
+  - dataset: ssc
+    seed: 47
+    execution_order: [node_hierarchical, flat_ordered]
+  - dataset: ssc
+    seed: 57
+    execution_order: [flat_ordered, node_hierarchical]

@@ -1,0 +1,12 @@
+include:
+  - ../../distributed_evaluation/ssc/lif_128_fedavg_reference.yaml
+  - ../base.yaml
+name: ssc_lif_128_fedavg_example_count_longest_processing_time
+parallel_execution:
+  client_assignment: example_count_longest_processing_time
+scheduler:
+  strategy: example_count_longest_processing_time
+evaluation:
+  comparison_reference: ssc_lif_128_fedavg_round_robin
+metadata:
+  experiment: ssc_lif_128_fedavg_example_count_longest_processing_time

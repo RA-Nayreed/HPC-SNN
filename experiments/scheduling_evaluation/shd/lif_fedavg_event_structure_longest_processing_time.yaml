@@ -1,0 +1,12 @@
+include:
+  - ../../distributed_evaluation/shd/lif_fedavg_reference.yaml
+  - ../base.yaml
+name: shd_lif_fedavg_event_structure_longest_processing_time
+parallel_execution:
+  client_assignment: event_structure_longest_processing_time
+scheduler:
+  strategy: event_structure_longest_processing_time
+evaluation:
+  comparison_reference: shd_lif_fedavg_round_robin
+metadata:
+  experiment: shd_lif_fedavg_event_structure_longest_processing_time

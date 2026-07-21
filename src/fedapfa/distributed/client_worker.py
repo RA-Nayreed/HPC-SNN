@@ -26,6 +26,7 @@ class ClientResultEnvelope:
     incoming_global_model_id: str
     update_identity: str
     result: ClientResult
+    completed_at_unix_nanoseconds: int
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,8 @@ class RankClientPayload:
     process_rank: int
     device_index: int
     device_slot: int
+    node_rank: int
+    local_rank: int
     assigned_client_ids: list[str]
     assigned_example_count: int
     process_busy_time_seconds: float
@@ -151,6 +154,7 @@ def train_rank_clients(
             incoming_global_model_id=incoming_global_model_id,
             update_identity=state_identity(cpu_result.state_dict),
             result=cpu_result,
+            completed_at_unix_nanoseconds=time.time_ns(),
         )
         _validate_result(envelope, assignment, round_number, training_seed, incoming_state)
         envelopes.append(envelope)
@@ -160,9 +164,7 @@ def train_rank_clients(
             torch.cuda.empty_cache()
     busy_time = time.monotonic() - started
     peak_values = [
-        value.result.peak_cuda_memory_bytes
-        for value in envelopes
-        if value.result.peak_cuda_memory_bytes is not None
+        value.result.peak_cuda_memory_bytes for value in envelopes if value.result.peak_cuda_memory_bytes is not None
     ]
     peak = max(peak_values) if peak_values else None
     reserved_values = [
@@ -174,6 +176,8 @@ def train_rank_clients(
         process_rank=context.rank,
         device_index=context.device_index,
         device_slot=context.device_slot,
+        node_rank=context.node_rank,
+        local_rank=context.local_rank,
         assigned_client_ids=[value.client_id for value in local_assignments],
         assigned_example_count=sum(value.result.example_count for value in envelopes),
         process_busy_time_seconds=busy_time,
@@ -197,21 +201,20 @@ def order_client_results(
     if len(payload_ranks) != len(set(payload_ranks)):
         raise RuntimeError("distributed result payloads contain a duplicate process rank")
     expected_ranks = sorted({value.process_rank for value in assignments})
-    if sorted(payload_ranks) != expected_ranks:
+    if not set(expected_ranks).issubset(payload_ranks):
         raise RuntimeError("distributed result payloads are missing an assigned process rank")
     for payload in payloads:
-        expected_clients = [
-            value.client_id for value in assignments if value.process_rank == payload.process_rank
-        ]
+        expected_clients = [value.client_id for value in assignments if value.process_rank == payload.process_rank]
         if payload.assigned_client_ids != expected_clients:
             raise RuntimeError("distributed result payload has an incompatible assigned-client list")
     envelopes = [envelope for payload in payloads for envelope in payload.results]
     if len(envelopes) != len(assignments):
         raise RuntimeError("distributed result count does not match selected clients")
     by_position = {value.selected_position: value for value in envelopes}
-    if len(by_position) != len(envelopes) or set(by_position) != set(range(len(assignments))):
+    expected_positions = {value.selected_position for value in assignments}
+    if len(by_position) != len(envelopes) or set(by_position) != expected_positions:
         raise RuntimeError("distributed results contain missing or duplicate selected positions")
-    ordered = [by_position[position] for position in range(len(assignments))]
+    ordered = [by_position[value.selected_position] for value in assignments]
     for assignment, envelope in zip(assignments, ordered, strict=True):
         expected_seed = derive_seed(
             config["seed"],

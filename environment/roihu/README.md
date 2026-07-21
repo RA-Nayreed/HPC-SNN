@@ -213,6 +213,29 @@ With the preserved execution directories and generated cost artifacts available 
 
 Exact fitting, summary regeneration, and hash-verification commands are in the [reproducibility guide](../../docs/reproducibility.md#client-resource-measurement-and-cost-estimation). Scientific interpretation and limitations are in the [resource record](../../thesis_records/resource_measurement.md).
 
+## Scheduling and hierarchical-reduction allocations
+
+The scheduling interface requests one `gpumedium` node, four `gpu:gh200` resources, and 288 CPU cores. Each of six dataset/seed array allocations runs its three counterbalanced treatments sequentially as independent `torch.distributed.run` invocations through the project virtual-environment interpreter.
+
+The hierarchy interface requests two `gpumedium` nodes, two `gpu:gh200` resources and 144 CPU cores per task/node, two Slurm tasks total with one task per node, and one distributed agent per node. Each agent starts two workers, for four global workers. The first hostname returned by `scontrol show hostnames` is the rendezvous host; the port is a deterministic allocation-scoped value. Global ranks are node-major, so node zero owns ranks 0–1 and node one owns ranks 2–3. The launcher checks two visible devices per node and NCCL availability and uses `srun --kill-on-bad-exit=1` so a failed node causes a nonzero allocation status. It never invokes a standalone `torchrun` executable.
+
+The declared live Roihu state is `PartitionName=gpumedium`, `MaxNodes=4`, `MaxTime=1-12:00:00`, `AllowAccounts=ALL`, and `AllowQos=ALL`. Both collections therefore use `gpumedium` for at most 36 hours; the scripts do not validate or select a partition dynamically and provide no fallback.
+
+Submit without an implicit array throttle:
+
+~~~bash
+bash scripts/slurm/submit_roihu_scheduling_evaluation.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn"
+bash scripts/slurm/submit_roihu_hierarchical_reduction.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn"
+~~~
+
+Both wrappers validate imports, manifests, matrix counts, and local data before training. They print allocation counts, scientific execution counts, topology, maximum simultaneous GPU demand, allocation rows, and a machine-readable job ID. CUDA MPS variables are removed. Scheduling requires four distinct UUIDs on its node. Hierarchy requires two distinct UUIDs on each node and four globally. NCCL startup then rejects incomplete ranks, duplicate or unexpected UUIDs, or a rank/local-rank/device mapping that differs from the declared node-major topology before constructing the workload. Treatment order and position, Slurm allocation fields, hostname/rank/device/GPU UUID mapping, Git/config/model identities, CUDA build, and telemetry paths are preserved as attempt provenance. Physical hostname and allocation ID do not enter the stable scientific identity.
+
+The three scheduling treatments and two hierarchy treatments are sequential within each dataset/seed allocation. Slurm allocation elapsed time and billed four-GPU hours are therefore retained once per allocation. Per-treatment GPU exposure is derived from internal duration, clearly labeled, and never counted as separate billing. The summary reconciles internal durations plus initialization, between-treatment, and remaining overhead to allocation elapsed time within two seconds.
+
+No execution or performance claim is recorded here. Generated summaries belong under scratch until declared collection acceptance passes.
+
 ## CIFAR-10 Fed-SNN execution and evidence
 
 The six-task execution completed successfully. The [Slurm accounting record](../../results/fedsnn_paper_evaluation/provenance/slurm-accounting.txt) contains tasks `236880_0` through `236880_5`, all `COMPLETED` with exit code `0:0`. Each task used one GH200, and every scientific execution reached round 100. CIFAR-10 was already present at `$WORK_DIR/data/cifar10`; neither launcher nor trainer downloaded it.

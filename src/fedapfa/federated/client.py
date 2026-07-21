@@ -187,6 +187,7 @@ def evaluate_model(
         per_class_accuracy=per_class_accuracy(matrix),
         macro_f1=macro_f1_from_confusion_matrix(matrix),
         peak_cuda_memory_bytes=torch.cuda.max_memory_allocated(device) if device.type == "cuda" else None,
+        predictions=predictions,
     )
     _finite_metrics(result.__dict__)
     return result

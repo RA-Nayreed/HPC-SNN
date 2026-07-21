@@ -6,6 +6,9 @@ from dataclasses import asdict, dataclass
 
 import torch.distributed as dist
 
+from fedapfa.scheduling.assignment import validate_assignments
+from fedapfa.scheduling.base import ScheduledClient
+
 from .process_context import ProcessContext
 
 
@@ -53,3 +56,31 @@ def broadcast_selected_clients(
     if len(selected) != len(set(selected)):
         raise RuntimeError("selected-client broadcast contains duplicates")
     return selected
+
+
+def broadcast_assignments(
+    context: ProcessContext,
+    assignments: list[ScheduledClient] | None,
+    selected_client_ids: list[str],
+) -> list[ScheduledClient]:
+    """Broadcast coordinator-created assignments before any client starts training."""
+
+    if context.is_coordinator:
+        if assignments is None:
+            raise ValueError("rank 0 must provide client assignments")
+        validate_assignments(assignments, selected_client_ids, context.world_size)
+        payload = [[assignment.record() for assignment in assignments]]
+    else:
+        if assignments is not None:
+            raise ValueError("nonzero ranks cannot provide client assignments")
+        payload = [None]
+    dist.broadcast_object_list(payload, src=0, device=context.control_device)
+    records = payload[0]
+    if not isinstance(records, list):
+        raise RuntimeError("assignment broadcast is incompatible")
+    try:
+        received = [ScheduledClient(**record) for record in records]
+        validate_assignments(received, selected_client_ids, context.world_size)
+    except (TypeError, ValueError) as error:
+        raise RuntimeError("assignment broadcast is incompatible") from error
+    return received

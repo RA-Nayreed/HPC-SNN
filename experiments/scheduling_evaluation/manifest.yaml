@@ -1,0 +1,59 @@
+schema_version: 1
+collection: scheduling_evaluation
+seeds_file: seeds.yaml
+experiments:
+  - id: shd_lif_fedavg_round_robin
+    config: shd/lif_fedavg_round_robin.yaml
+    mandatory: true
+  - id: shd_lif_fedavg_example_count_longest_processing_time
+    config: shd/lif_fedavg_example_count_longest_processing_time.yaml
+    mandatory: true
+  - id: shd_lif_fedavg_event_structure_longest_processing_time
+    config: shd/lif_fedavg_event_structure_longest_processing_time.yaml
+    mandatory: true
+  - id: ssc_lif_128_fedavg_round_robin
+    config: ssc/lif_128_fedavg_round_robin.yaml
+    mandatory: true
+  - id: ssc_lif_128_fedavg_example_count_longest_processing_time
+    config: ssc/lif_128_fedavg_example_count_longest_processing_time.yaml
+    mandatory: true
+  - id: ssc_lif_128_fedavg_event_structure_longest_processing_time
+    config: ssc/lif_128_fedavg_event_structure_longest_processing_time.yaml
+    mandatory: true
+allocations:
+  - dataset: shd
+    seed: 37
+    execution_order:
+      - round_robin
+      - example_count_longest_processing_time
+      - event_structure_longest_processing_time
+  - dataset: shd
+    seed: 47
+    execution_order:
+      - example_count_longest_processing_time
+      - event_structure_longest_processing_time
+      - round_robin
+  - dataset: shd
+    seed: 57
+    execution_order:
+      - event_structure_longest_processing_time
+      - round_robin
+      - example_count_longest_processing_time
+  - dataset: ssc
+    seed: 37
+    execution_order:
+      - round_robin
+      - example_count_longest_processing_time
+      - event_structure_longest_processing_time
+  - dataset: ssc
+    seed: 47
+    execution_order:
+      - example_count_longest_processing_time
+      - event_structure_longest_processing_time
+      - round_robin
+  - dataset: ssc
+    seed: 57
+    execution_order:
+      - event_structure_longest_processing_time
+      - round_robin
+      - example_count_longest_processing_time

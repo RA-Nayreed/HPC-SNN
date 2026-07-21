@@ -65,6 +65,7 @@ class EvaluationResult:
     per_class_accuracy: list[float]
     macro_f1: float
     peak_cuda_memory_bytes: int | None
+    predictions: list[int] | None = None
 
 
 @dataclass(frozen=True)

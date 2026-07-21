@@ -15,7 +15,7 @@ from fedapfa.cost_estimation.dataset import build_client_cost_dataset
 from fedapfa.federated.client import train_client
 from fedapfa.measurement.clock import CpuTimingAdapter
 from fedapfa.measurement.features import ObservedClientWork
-from fedapfa.utilities.serialization import atomic_write_json
+from fedapfa.utilities.serialization import atomic_write_json, canonical_json
 
 
 class Classifier(nn.Module):
@@ -329,6 +329,14 @@ def test_cost_fitting_writes_json_models_and_offline_assignment_artifacts(tmp_pa
     assert result["evaluation"]["data_separation"]["evaluation_seed"] == 27
     assert "prequential_seed_27" in result["evaluation"]["settings"]
     assert result["evaluation"]["data_separation"]["historical_weight_selection"]["seed_27_used"] is False
+    fitting_rows = [row for row in result["rows"] if row["scientific_seed"] in {7, 17}]
+    evaluation_rows = [row for row in result["rows"] if row["scientific_seed"] == 27]
+    fitting_hashes = {hashlib.sha256(canonical_json(row).encode()).hexdigest() for row in fitting_rows}
+    evaluation_hashes = {hashlib.sha256(canonical_json(row).encode()).hexdigest() for row in evaluation_rows}
+    exported_hashes = set(result["selected_scheduler_model"].fitting_row_hashes)
+    assert exported_hashes == fitting_hashes
+    assert not exported_hashes & evaluation_hashes
+    assert len(exported_hashes) + len(evaluation_hashes) == len(result["rows"])
     assert (tmp_path / "client_cost_model.json").is_file()
     assert (tmp_path / "energy_cost_model.json").is_file()
     assert (tmp_path / "assignment_readiness.json").is_file()

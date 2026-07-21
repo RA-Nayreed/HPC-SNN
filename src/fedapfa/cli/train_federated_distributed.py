@@ -1,4 +1,4 @@
-"""Torchrun entry point for single-node distributed FedAvg."""
+"""Shared torch-distributed entry point and execution lifecycle."""
 
 from __future__ import annotations
 
@@ -12,6 +12,8 @@ import torch.distributed as dist
 from fedapfa.configuration import (
     distributed_execution_identity,
     distributed_scientific_identity,
+    evaluation_execution_identity,
+    evaluation_scientific_identity,
     load_distributed_evaluation_config,
     validate_distributed_evaluation_config,
 )
@@ -66,9 +68,7 @@ def execute_distributed(config: dict, args: argparse.Namespace, module_name: str
     training_token = None
     result = None
     try:
-        command = shlex.join(
-            [sys.executable, "-m", module_name, *sys.argv[1:]]
-        )
+        command = shlex.join([sys.executable, "-m", module_name, *sys.argv[1:]])
         coordinator_action = (
             plan_run(config, command, args.resume, args.resume_auto) if context.is_coordinator else None
         )
@@ -93,10 +93,18 @@ def execute_distributed(config: dict, args: argparse.Namespace, module_name: str
                 action.resume_checkpoint,
             )
         dist.barrier()
+        scientific_identity = (
+            evaluation_scientific_identity(config)
+            if "evaluation" in config
+            else distributed_scientific_identity(config)
+        )
+        configured_execution_identity = (
+            evaluation_execution_identity(config) if "evaluation" in config else distributed_execution_identity(config)
+        )
         identity = {
             "configuration_id": configuration_identity(config),
-            "scientific_identity": distributed_scientific_identity(config),
-            "execution_identity": distributed_execution_identity(config),
+            "scientific_identity": scientific_identity,
+            "execution_identity": configured_execution_identity,
             "git": git_metadata(),
             "dataset_identity": bundle.split_artifact.get("dataset_identity"),
             "split_id": bundle.split_artifact["split_id"],

@@ -31,6 +31,7 @@ fedapfa-validate-config = "fedapfa.cli.validate_run:main"
 fedapfa-train-centralized = "fedapfa.cli.train_centralized:main"
 fedapfa-train-federated = "fedapfa.cli.train_federated:main"
 fedapfa-train-federated-distributed = "fedapfa.cli.train_federated_distributed:main"
+fedapfa-train-system-evaluation = "fedapfa.cli.train_system_evaluation:main"
 fedapfa-evaluate-checkpoint = "fedapfa.cli.evaluate_checkpoint:main"
 fedapfa-summarize-centralized = "fedapfa.cli.summarize_centralized:main"
 fedapfa-summarize-federated = "fedapfa.cli.summarize_federated:main"
@@ -43,6 +44,9 @@ fedapfa-train-resource-measurement = "fedapfa.cli.train_resource_measurement:mai
 fedapfa-build-client-cost-data = "fedapfa.cli.build_client_cost_data:main"
 fedapfa-fit-client-cost = "fedapfa.cli.fit_client_cost:main"
 fedapfa-summarize-resource-measurement = "fedapfa.cli.summarize_resource_measurement:main"
+fedapfa-summarize-scheduling-evaluation = "fedapfa.cli.summarize_scheduling_evaluation:main"
+fedapfa-summarize-hierarchical-reduction = "fedapfa.cli.summarize_hierarchical_reduction:main"
+fedapfa-plot-system-evaluation = "fedapfa.cli.plot_system_evaluation:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fedapfa", "analysis"]

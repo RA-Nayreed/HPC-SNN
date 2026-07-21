@@ -8,12 +8,14 @@ import torch
 
 def environment_metadata():
     gpu_count = torch.cuda.device_count() if torch.cuda.is_available() else 0
+    nccl_version = torch.cuda.nccl.version() if torch.distributed.is_nccl_available() else None
     return {
         "python": sys.version,
         "platform": platform.platform(),
         "architecture": platform.machine(),
         "torch": torch.__version__,
         "cuda_runtime": torch.version.cuda,
+        "nccl": nccl_version,
         "cudnn": torch.backends.cudnn.version(),
         "cuda_available": torch.cuda.is_available(),
         "visible_gpu_count": gpu_count,

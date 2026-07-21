@@ -1,0 +1,8 @@
+include:
+  - ../../distributed_evaluation/shd/lif_fedavg_reference.yaml
+  - ../base.yaml
+name: shd_lif_fedavg_flat_ordered
+evaluation:
+  comparison_reference: shd_lif_fedavg_flat_ordered
+metadata:
+  experiment: shd_lif_fedavg_flat_ordered

@@ -1,0 +1,8 @@
+include:
+  - ../../distributed_evaluation/ssc/lif_128_fedavg_reference.yaml
+  - ../base.yaml
+name: ssc_lif_128_fedavg_flat_ordered
+evaluation:
+  comparison_reference: ssc_lif_128_fedavg_flat_ordered
+metadata:
+  experiment: ssc_lif_128_fedavg_flat_ordered

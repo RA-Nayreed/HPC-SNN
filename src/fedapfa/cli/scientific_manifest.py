@@ -11,6 +11,8 @@ import yaml
 from fedapfa.configuration import (
     load_device_capacity_manifest,
     load_distributed_evaluation_manifest,
+    load_evaluation_allocations,
+    load_evaluation_manifest,
     load_heterogeneity_context_tasks,
     load_heterogeneity_manifest,
     load_published_fedsnn_manifest,
@@ -37,6 +39,8 @@ def _tasks(path: str):
         return load_device_capacity_manifest(path)
     if collection == "resource_measurement":
         return load_resource_measurement_manifest(path)
+    if collection in {"scheduling_evaluation", "hierarchical_reduction_evaluation"}:
+        return load_evaluation_manifest(path)
     raise ValueError(f"unsupported scientific collection: {collection}")
 
 
@@ -44,13 +48,27 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Validate and expand a federated scientific manifest.")
     parser.add_argument(
         "action",
-        choices=("validate", "count", "task", "context-count", "context-task"),
+        choices=(
+            "validate",
+            "count",
+            "task",
+            "context-count",
+            "context-task",
+            "allocation-count",
+            "allocation-task",
+        ),
     )
     parser.add_argument("--manifest", required=True)
     parser.add_argument("--index", type=int)
     args = parser.parse_args()
     context_action = args.action.startswith("context-")
-    values = load_heterogeneity_context_tasks(args.manifest) if context_action else _tasks(args.manifest)
+    allocation_action = args.action.startswith("allocation-")
+    if context_action:
+        values = load_heterogeneity_context_tasks(args.manifest)
+    elif allocation_action:
+        values = load_evaluation_allocations(args.manifest)
+    else:
+        values = _tasks(args.manifest)
     if args.action == "validate":
         print(
             json.dumps(
@@ -63,7 +81,7 @@ def main() -> None:
                 sort_keys=True,
             )
         )
-    elif args.action in {"count", "context-count"}:
+    elif args.action in {"count", "context-count", "allocation-count"}:
         print(len(values))
     else:
         if args.index is None or not 0 <= args.index < len(values):
@@ -71,6 +89,11 @@ def main() -> None:
         value = values[args.index]
         if context_action:
             print("\t".join((str(value.seed), value.experiment, value.source_record["run_directory"])))
+        elif allocation_action:
+            fields = [value.dataset, str(value.seed)]
+            for treatment, task in zip(value.execution_order, value.tasks, strict=True):
+                fields.extend((treatment, str(task.config_path)))
+            print("\t".join(fields))
         else:
             fields = [
                 str(value.config_path),
@@ -94,6 +117,17 @@ def main() -> None:
                         value.config["output_root"],
                     )
                 )
+                if "evaluation" in value.config:
+                    fields.extend(
+                        str(item)
+                        for item in (
+                            parallel["node_count"],
+                            parallel["devices_per_node"],
+                            value.config["scheduler"]["strategy"],
+                            value.config["aggregation_execution"]["topology"],
+                            value.config["evaluation"]["comparison_reference"],
+                        )
+                    )
             print("\t".join(fields))
 
 

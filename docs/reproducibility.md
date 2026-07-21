@@ -94,7 +94,8 @@ bash scripts/slurm/submit_roihu_federated.sh \
 This is a reproduction command, not an action required to validate the committed evidence. A live reproduction array can be monitored with:
 
 ~~~bash
-squeue --job <JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+squeue --job <SCHEDULING_JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+squeue --job <HIERARCHICAL_JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
 ~~~
 
 Scheduler outcomes can be recorded with:
@@ -275,6 +276,89 @@ The authoritative analysis artifacts are:
 Seeds 7 and 17 supplied fitting and client-grouped selection. Seed 27 was absent from fitting, historical-weight selection, and model selection and supplied untouched evaluation. Evaluation covers SHD, SSC, their joint collection, both directed transfers, and prequential seed-27 prediction. Client identity is used only for grouping and history lookup. It is not a predictor; current-execution spike measurements occur after assignment and are excluded from deployable models.
 
 The exported scheduling model is a ridge `event_structure` model targeting `client_wall_time_seconds`; the corresponding exported energy model is a ridge `event_structure` model targeting `gross_energy_joules`. Stored JSON reloads reproduce predictions. The spike decision is `spike_history_not_adopted`: SHD passed the declared median, tail, and rank conditions, whereas SSC failed the median and tail conditions while maintaining rank. Prediction-time and offline-assignment conditions passed, but the two-dataset adoption rule did not.
+
+## Scheduling and hierarchical-reduction execution
+
+Validate the matrices without accessing a dataset:
+
+~~~bash
+python -m fedapfa.cli.scientific_manifest validate --manifest experiments/scheduling_evaluation/manifest.yaml
+python -m fedapfa.cli.scientific_manifest validate --manifest experiments/hierarchical_reduction_evaluation/manifest.yaml
+python -m fedapfa.cli.scientific_manifest allocation-count --manifest experiments/scheduling_evaluation/manifest.yaml
+python -m fedapfa.cli.scientific_manifest allocation-count --manifest experiments/hierarchical_reduction_evaluation/manifest.yaml
+~~~
+
+Submit the six one-node scheduling allocations and six two-node hierarchical allocations:
+
+~~~bash
+bash scripts/slurm/submit_roihu_scheduling_evaluation.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn"
+bash scripts/slurm/submit_roihu_hierarchical_reduction.sh \
+  --work-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn"
+~~~
+
+An optional `--max-parallel N` adds an explicit array throttle. Omitting it leaves the array unthrottled; the wrapper prints the resulting maximum possible GPU demand. Both collections use `gpumedium` with a 36-hour limit. Scheduling requests one node, one task, four GH200 GPUs, four workers, 288 CPU cores, and one worker per GPU. Hierarchy requests two nodes, two tasks with one task per node, two GH200 GPUs and 144 CPU cores per task/node, one distributed agent and two workers per node, and four global workers. Neither collection uses CUDA MPS. No runtime partition validation, automatic selection, or fallback is implemented.
+
+The scheduler model provenance separates the 6,000 accepted rows into 4,000 fitting rows from seeds 7 and 17 and 2,000 untouched evaluation rows from seed 27. The loader verifies the immutable model and evaluation-provenance hashes, exact counts and row sets, fitting seeds, zero seed-27 overlap with fitting or seed-7/17 selection rows, and flags showing that seed 27 did not affect normalization, coefficients, regression family, features, or hyperparameters. Seed 27 is post-freeze evaluation/adoption evidence only.
+
+Manifest validation compares every fully resolved pair against a versioned whitelist and reports named scientific invariants. Scheduling permits only scheduler strategy, treatment/order identity, and run/output identity differences; hierarchy substitutes aggregation topology for scheduler strategy. Any other resolved difference fails before execution.
+
+Both launchers enumerate exactly four nonempty distinct allocated GPU UUIDs before training. The two-node launcher first requires two distinct UUIDs per node, then exactly four globally. NCCL startup collectively verifies that all four process records are complete, distinct, follow the declared node-major rank/local-rank/device mapping, and equal the allocation UUID set before workload or dataset construction.
+
+Monitor every returned ID and capture one accounting file for each collection:
+
+~~~bash
+squeue --job <SCHEDULING_JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+squeue --job <HIERARCHICAL_JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+mkdir -p "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation" "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation"
+sacct -j <SCHEDULING_JOB_ID> -X --array --parsable2 \
+  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
+  > "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation/slurm-accounting.txt"
+sacct -j <HIERARCHICAL_JOB_ID> -X --array --parsable2 \
+  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
+  > "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation/slurm-accounting.txt"
+~~~
+
+`sacct -X` retains only array-task allocation parents, excluding individual `srun` step rows. Thus each dataset/seed allocation appears once even though it contains three scheduling treatments or two hierarchy treatments. The summarizer records `slurm_allocation_elapsed_seconds` and `slurm_allocation_gpu_hours` only on that allocation. Treatments record `internal_treatment_duration_seconds` and `derived_treatment_gpu_exposure_hours`; the latter is duration times four GPUs and is not separately billed Slurm accounting. For each allocation it calculates `allocation_initialization_seconds`, `between_treatment_overhead_seconds`, `remaining_allocation_overhead_seconds`, and `allocation_reconciliation_error_seconds`, and requires their sum with all internal treatment durations to equal allocation elapsed time within the declared two-second tolerance. Total billed GPU-hours sum the six allocation records once.
+
+The scheduling decision artifact preserves all six dataset/seed reductions. Its 5% gate uses the arithmetic mean of three paired reductions separately within SHD and SSC; its improvement-count gate requires at least two positive seeds separately in each dataset; and its slowdown gate requires every individual dataset/seed reduction to be at least -2%. Datasets are never pooled.
+
+After every task completes, validate and summarize into scratch, not the repository:
+
+~~~bash
+fedapfa-summarize-scheduling-evaluation \
+  --manifest experiments/scheduling_evaluation/manifest.yaml \
+  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/scheduling_evaluation" \
+  --slurm-accounting "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation/slurm-accounting.txt" \
+  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation"
+fedapfa-summarize-hierarchical-reduction \
+  --manifest experiments/hierarchical_reduction_evaluation/manifest.yaml \
+  --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/hierarchical_reduction_evaluation" \
+  --slurm-accounting "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation/slurm-accounting.txt" \
+  --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation"
+~~~
+
+Both commands write summary JSON/CSV/Markdown, a decision JSON, collection acceptance, validation findings, and provenance. They exit nonzero for incomplete evidence. Only after both acceptance JSON files say `collection_valid: true`, inspect the generated files and copy them explicitly:
+
+~~~bash
+python -c 'import json, pathlib, sys; assert all(json.loads(pathlib.Path(value).read_text())["collection_valid"] is True for value in sys.argv[1:])' \
+  "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation/scheduling_evaluation_acceptance.json" \
+  "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation/hierarchical_reduction_evaluation_acceptance.json"
+mkdir -p results/scheduling_evaluation results/hierarchical_reduction_evaluation
+cp -a "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation/." results/scheduling_evaluation/
+cp -a "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation/." results/hierarchical_reduction_evaluation/
+~~~
+
+Do not run the copy commands for partial or invalid evidence. Figure generation accepts only a valid summary artifact:
+
+~~~bash
+fedapfa-plot-system-evaluation \
+  --summary results/scheduling_evaluation/scheduling_evaluation_summary.json \
+  --output-dir results/scheduling_evaluation/figures
+fedapfa-plot-system-evaluation \
+  --summary results/hierarchical_reduction_evaluation/hierarchical_reduction_evaluation_summary.json \
+  --output-dir results/hierarchical_reduction_evaluation/figures
+~~~
 
 ### Environment paths
 
