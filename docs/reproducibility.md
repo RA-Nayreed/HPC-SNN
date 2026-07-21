@@ -340,7 +340,7 @@ fedapfa-summarize-hierarchical-reduction \
   --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation"
 ~~~
 
-Both commands write summary JSON/CSV/Markdown, a decision JSON, collection acceptance, validation findings, and provenance. They exit nonzero for incomplete evidence. Only after both acceptance JSON files say `collection_valid: true`, inspect the generated files and copy them explicitly:
+Both commands write summary JSON/CSV/Markdown, a decision JSON, collection acceptance, validation findings, and provenance. They exit nonzero for incomplete evidence. `collection_valid` and `evidence_complete` describe execution, measurement, protocol, provenance, and official-test completeness; they do not assert that a candidate treatment passed its scientific retention gates. In particular, complete hierarchy evidence can have `collection_valid: true`, `aggregation_equivalence: false`, and `node_hierarchical_reduction_not_retained`. The unchanged tolerance, prediction, checkpoint, communication, and runtime gates remain in the decision artifact. Paired hierarchy records separately report execution-structure identity, model-state structure, direct contribution/weight validation, and the first differing incoming-model, client-update, and aggregate-model rounds. Only after both acceptance JSON files say `collection_valid: true`, inspect the generated files and copy them explicitly:
 
 ~~~bash
 python -c 'import json, pathlib, sys; assert all(json.loads(pathlib.Path(value).read_text())["collection_valid"] is True for value in sys.argv[1:])' \

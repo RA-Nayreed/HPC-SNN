@@ -70,6 +70,72 @@ def _fraction(value, name: str) -> float:
     return result
 
 
+def _validate_round_contributions(record: dict, config: dict) -> None:
+    """Validate one recorded contribution per selected client and exact FedAvg weights."""
+
+    round_number = record.get("round_number")
+    selected = record.get("selected_client_ids")
+    expected_count = config["federated"]["clients_per_round"]
+    if (
+        not isinstance(selected, list)
+        or len(selected) != expected_count
+        or len(set(selected)) != expected_count
+    ):
+        raise ValueError(f"round {round_number} has incomplete or duplicate selected-client coverage")
+
+    identities = record.get("ordered_update_identities")
+    if (
+        not isinstance(identities, list)
+        or len(identities) != expected_count
+        or any(not isinstance(value, str) or not value for value in identities)
+    ):
+        raise ValueError(f"round {round_number} does not record exactly one update per selected client")
+
+    counts = record.get("client_example_counts")
+    if (
+        not isinstance(counts, list)
+        or len(counts) != expected_count
+        or any(not isinstance(value, int) or isinstance(value, bool) or value <= 0 for value in counts)
+    ):
+        raise ValueError(f"round {round_number} has invalid aggregation denominators")
+
+    weights = record.get("aggregation_weights")
+    if (
+        not isinstance(weights, list)
+        or len(weights) != expected_count
+        or any(
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value < 0
+            for value in weights
+        )
+        or not math.isclose(sum(weights), 1.0, rel_tol=0.0, abs_tol=1e-12)
+    ):
+        raise ValueError(f"round {round_number} has invalid aggregation weights")
+
+    policy = config["federated"]["aggregation_weighting"]
+    if record.get("aggregation_weighting") != policy:
+        raise ValueError(f"round {round_number} records the wrong aggregation policy")
+    if policy == "uniform":
+        expected_weights = [1.0 / expected_count] * expected_count
+    elif policy == "example_count":
+        denominator = sum(counts)
+        expected_weights = [value / denominator for value in counts]
+    else:  # Configuration validation should make this unreachable.
+        raise ValueError(f"unsupported aggregation weighting: {policy}")
+    if weights != expected_weights:
+        raise ValueError(f"round {round_number} aggregation weights differ from exact {policy} weights")
+    if record.get("aggregation_order") != "selected_client_order":
+        raise ValueError(f"round {round_number} does not preserve selected-client aggregation order")
+    for field in (
+        "global_model_identity_before_aggregation",
+        "global_model_identity_after_aggregation",
+    ):
+        if not isinstance(record.get(field), str) or not record[field]:
+            raise ValueError(f"round {round_number} lacks {field}")
+
+
 def _allocated_gpus(value: str) -> int:
     candidates = []
     for item in value.split(","):
@@ -322,7 +388,10 @@ def _load_run(task, root: Path, collection: str) -> dict:
             or value.get("device_index") != expected_local_rank
         ):
             raise ValueError("process rank, node, device, and GPU UUID mapping is incompatible")
+    if [record.get("round_number") for record in rounds] != list(range(1, configured_rounds + 1)):
+        raise ValueError("round records are not in complete communication-round order")
     for record in rounds:
+        _validate_round_contributions(record, task.config)
         assignments = record.get("client_assignments")
         selected = record.get("selected_client_ids")
         if not isinstance(assignments, list) or [value.get("client_id") for value in assignments] != selected:
@@ -510,9 +579,12 @@ def _load_run(task, root: Path, collection: str) -> dict:
         "client_example_counts": [value["client_example_counts"] for value in rounds],
         "client_training_examples_presented": [value["client_training_examples_presented"] for value in rounds],
         "update_identities": [value["ordered_update_identities"] for value in rounds],
+        "incoming_model_identities": [value["global_model_identity_before_aggregation"] for value in rounds],
         "aggregate_model_identities": [value["global_model_identity_after_aggregation"] for value in rounds],
         "aggregation_weights": [value["aggregation_weights"] for value in rounds],
         "aggregation_orders": [value["aggregation_order"] for value in rounds],
+        "contribution_coverage_complete": True,
+        "aggregation_weights_and_denominators_correct": True,
         "validation_records": [
             (
                 value["validation_loss"],
@@ -633,7 +705,48 @@ def _reconcile_allocation(record: dict, runs: list[dict], collection: str) -> di
     }
 
 
-def _structural(reference: dict, candidate: dict, *, hierarchical: bool) -> tuple[bool, list[str]]:
+def _first_differing_round(reference: list, candidate: list) -> int | None:
+    for index in range(max(len(reference), len(candidate))):
+        if index >= len(reference) or index >= len(candidate) or reference[index] != candidate[index]:
+            return index + 1
+    return None
+
+
+def _trajectory_diagnostics(reference: dict, candidate: dict) -> dict:
+    first_incoming = _first_differing_round(
+        reference["incoming_model_identities"], candidate["incoming_model_identities"]
+    )
+    first_update = _first_differing_round(reference["update_identities"], candidate["update_identities"])
+    first_aggregate = _first_differing_round(
+        reference["aggregate_model_identities"], candidate["aggregate_model_identities"]
+    )
+    available = [value for value in (first_incoming, first_update, first_aggregate) if value is not None]
+    if not available:
+        classification = "no_recorded_trajectory_divergence"
+    else:
+        earliest = min(available)
+        if first_update == earliest and (first_incoming is None or first_update < first_incoming):
+            classification = "client_update_divergence_before_aggregation"
+        elif first_aggregate == earliest and (
+            first_update is None or first_aggregate < first_update
+        ) and (first_incoming is None or first_aggregate < first_incoming):
+            classification = "aggregation_grouping_first_divergence"
+        elif first_incoming == earliest:
+            classification = "incoming_model_trajectory_divergence"
+        else:
+            classification = "simultaneous_recorded_stage_divergence"
+    return {
+        "client_update_trajectory_identity": first_update is None,
+        "incoming_model_trajectory_identity": first_incoming is None,
+        "aggregate_model_trajectory_identity": first_aggregate is None,
+        "first_differing_client_update_round": first_update,
+        "first_differing_incoming_model_round": first_incoming,
+        "first_differing_aggregate_model_round": first_aggregate,
+        "trajectory_divergence_classification": classification,
+    }
+
+
+def _execution_structure(reference: dict, candidate: dict) -> tuple[bool, list[str]]:
     fields = [
         "scientific_identity",
         "split_id",
@@ -643,33 +756,51 @@ def _structural(reference: dict, candidate: dict, *, hierarchical: bool) -> tupl
         "client_seeds",
         "client_example_counts",
         "client_training_examples_presented",
-        "update_identities",
         "aggregation_weights",
         "aggregation_orders",
-        "logical_communication",
     ]
-    if not hierarchical:
-        fields.append("aggregate_model_identities")
     differences = [field for field in fields if reference[field] != candidate[field]]
     return not differences, differences
 
 
 def _paired(reference: dict, candidate: dict, *, hierarchical: bool, config: dict) -> dict:
-    structural, differences = _structural(reference, candidate, hierarchical=hierarchical)
+    execution_structural, execution_differences = _execution_structure(reference, candidate)
+    trajectory = _trajectory_diagnostics(reference, candidate)
+    trajectory_differences = [
+        field
+        for field, identity_field in (
+            ("incoming_model_identities", "incoming_model_trajectory_identity"),
+            ("update_identities", "client_update_trajectory_identity"),
+            ("aggregate_model_identities", "aggregate_model_trajectory_identity"),
+        )
+        if not trajectory[identity_field]
+    ]
     numerical = classify_model_states(
         reference["_state"],
         candidate["_state"],
         absolute_tolerance=float(config["aggregation_execution"]["absolute_tolerance"]),
         relative_tolerance=float(config["aggregation_execution"]["relative_tolerance"]),
     )
+    numerical_record = numerical.record()
+    model_state_structural = numerical_record.pop("structural_identity")
     predictions_equal = prediction_identity(reference["official_predictions"], candidate["official_predictions"])
     checkpoint_equal = reference["selected_round"] == candidate["selected_round"]
     speedup = reference["total_runtime_seconds"] / candidate["total_runtime_seconds"]
     reduction = (reference["total_runtime_seconds"] - candidate["total_runtime_seconds"]) / reference[
         "total_runtime_seconds"
     ]
+    contribution_coverage = (
+        reference["contribution_coverage_complete"] and candidate["contribution_coverage_complete"]
+    )
+    weights_correct = (
+        reference["aggregation_weights_and_denominators_correct"]
+        and candidate["aggregation_weights_and_denominators_correct"]
+    )
     scheduler_exact = (
-        structural
+        execution_structural
+        and trajectory["client_update_trajectory_identity"]
+        and trajectory["incoming_model_trajectory_identity"]
+        and trajectory["aggregate_model_trajectory_identity"]
         and numerical.bitwise_parameter_identity
         and (
             reference["validation_records"] == candidate["validation_records"]
@@ -684,9 +815,16 @@ def _paired(reference: dict, candidate: dict, *, hierarchical: bool, config: dic
         "seed": candidate["seed"],
         "reference": reference["strategy"] if not hierarchical else reference["aggregation_topology"],
         "treatment": candidate["strategy"] if not hierarchical else candidate["aggregation_topology"],
-        "structural_identity": structural,
-        "structural_differences": differences,
-        **numerical.record(),
+        "execution_structural_identity": execution_structural,
+        "execution_structural_differences": execution_differences,
+        "model_state_structural_identity": model_state_structural,
+        "structural_identity": execution_structural,
+        "structural_differences": execution_differences,
+        "trajectory_identity_differences": trajectory_differences,
+        "contribution_coverage_complete": contribution_coverage,
+        "weights_and_denominators_correct": weights_correct,
+        **trajectory,
+        **numerical_record,
         "checkpoint_selection_identity": checkpoint_equal,
         "prediction_identity": predictions_equal,
         "official_test_accuracy_difference": candidate["official_test_accuracy"] - reference["official_test_accuracy"],
@@ -703,7 +841,7 @@ def _paired(reference: dict, candidate: dict, *, hierarchical: bool, config: dic
     }
 
 
-def _decision(collection: str, runs: list[dict], pairs: list[dict], valid: bool) -> dict:
+def _decision(collection: str, runs: list[dict], pairs: list[dict], evidence_available: bool) -> dict:
     if collection == "scheduling_evaluation":
         event_pairs = [value for value in pairs if value["treatment"] == "event_structure_longest_processing_time"]
         example_pairs = [value for value in pairs if value["treatment"] == "example_count_longest_processing_time"]
@@ -764,10 +902,10 @@ def _decision(collection: str, runs: list[dict], pairs: list[dict], valid: bool)
             "permitted_pre_execution_information_only": len(runs) == 18
             and all(value["permitted_pre_execution_information_only"] for value in runs),
         }
-        adopted = valid and all(conditions.values())
+        adopted = evidence_available and all(conditions.values())
         return {
             "decision": "event_structure_scheduler_adopted" if adopted else "event_structure_scheduler_not_adopted",
-            "evidence_available": valid,
+            "evidence_available": evidence_available,
             "pairing_semantics": {
                 "pairing_unit": "dataset_seed",
                 "datasets_pooled": False,
@@ -802,11 +940,16 @@ def _decision(collection: str, runs: list[dict], pairs: list[dict], valid: bool)
     hierarchical_runs = [value for value in runs if value["aggregation_topology"] == "node_hierarchical"]
     conditions = {
         "every_update_once": len(hierarchical_pairs) == 6
-        and all(value["structural_identity"] for value in hierarchical_pairs),
+        and all(value["contribution_coverage_complete"] for value in hierarchical_pairs),
         "weights_and_denominators_correct": len(hierarchical_pairs) == 6
-        and all("aggregation_weights" not in value["structural_differences"] for value in hierarchical_pairs),
+        and all(value["weights_and_denominators_correct"] for value in hierarchical_pairs),
         "structural_and_mathematical_equivalence": len(hierarchical_pairs) == 6
-        and all(value["structural_identity"] and value["mathematical_equivalence"] for value in hierarchical_pairs),
+        and all(
+            value["execution_structural_identity"]
+            and value["model_state_structural_identity"]
+            and value["mathematical_equivalence"]
+            for value in hierarchical_pairs
+        ),
         "parameter_differences_within_tolerance": len(hierarchical_pairs) == 6
         and all(value["mathematical_equivalence"] for value in hierarchical_pairs),
         "official_predictions_agree": len(hierarchical_pairs) == 6
@@ -824,10 +967,10 @@ def _decision(collection: str, runs: list[dict], pairs: list[dict], valid: bool)
         "official_test_ownership_preserved": len(hierarchical_runs) == 6
         and all(value["official_test_access_count"] == 1 for value in hierarchical_runs),
     }
-    retained = valid and all(conditions.values())
+    retained = evidence_available and all(conditions.values())
     return {
         "decision": "node_hierarchical_reduction_retained" if retained else "node_hierarchical_reduction_not_retained",
-        "evidence_available": valid,
+        "evidence_available": evidence_available,
         "conditions": conditions,
     }
 
@@ -984,11 +1127,15 @@ def summarize_evaluation(
                             key: value[key]
                             for key in (
                                 "seed",
-                                "structural_identity",
+                                "execution_structural_identity",
+                                "model_state_structural_identity",
                                 "mathematical_equivalence",
                                 "bitwise_parameter_identity",
                                 "prediction_identity",
                                 "checkpoint_selection_identity",
+                                "first_differing_client_update_round",
+                                "first_differing_aggregate_model_round",
+                                "trajectory_divergence_classification",
                             )
                         }
                         for value in selected_pairs
@@ -1001,10 +1148,25 @@ def summarize_evaluation(
         or len(pairs) == expected_pairs
         and all(value["scheduler_scientific_identity"] for value in pairs)
     )
+    execution_protocol_equivalence = (
+        collection != "hierarchical_reduction_evaluation"
+        or len(pairs) == expected_pairs
+        and all(
+            value["execution_structural_identity"]
+            and value["contribution_coverage_complete"]
+            and value["weights_and_denominators_correct"]
+            for value in pairs
+        )
+    )
     aggregation_equivalence = (
         collection != "hierarchical_reduction_evaluation"
         or len(pairs) == expected_pairs
-        and all(value["structural_identity"] and value["mathematical_equivalence"] for value in pairs)
+        and all(
+            value["execution_structural_identity"]
+            and value["model_state_structural_identity"]
+            and value["mathematical_equivalence"]
+            for value in pairs
+        )
     )
     provenance_completeness = (
         len(runs) == expected
@@ -1019,23 +1181,28 @@ def summarize_evaluation(
             for value in runs
         )
     )
-    collection_valid = (
+    official_test_isolation = len(runs) == expected and all(
+        value["official_test_access_count"] == 1 for value in runs
+    )
+    evidence_complete = (
         len(runs) == expected
         and not findings
         and scheduler_equivalence
-        and aggregation_equivalence
+        and execution_protocol_equivalence
         and provenance_completeness
-        and all(value["official_test_access_count"] == 1 for value in runs)
+        and official_test_isolation
     )
-    decision = _decision(collection, runs, pairs, collection_valid)
+    collection_valid = evidence_complete
+    decision = _decision(collection, runs, pairs, evidence_complete)
     acceptance = {
         "execution_completion": len(runs) == expected,
         "measurement_completeness": not findings,
         "scheduler_equivalence": scheduler_equivalence,
+        "execution_protocol_equivalence": execution_protocol_equivalence,
         "aggregation_equivalence": aggregation_equivalence,
-        "official_test_isolation": len(runs) == expected
-        and all(value["official_test_access_count"] == 1 for value in runs),
+        "official_test_isolation": official_test_isolation,
         "provenance_completeness": provenance_completeness,
+        "evidence_complete": evidence_complete,
         "hypothesis_decision": decision["decision"],
         "collection_valid": collection_valid,
         "validation_findings": findings,
@@ -1043,9 +1210,10 @@ def summarize_evaluation(
     stem = collection
     unique_allocations = reconciled_allocations
     summary = {
-        "schema_version": 1,
+        "schema_version": 2,
         "collection": collection,
         "valid": collection_valid,
+        "evidence_complete": evidence_complete,
         "expected_task_count": expected,
         "completed_task_count": len(runs),
         "required_seeds": list(EVALUATION_SEEDS),
@@ -1125,7 +1293,9 @@ def _write_markdown(path: Path, summary: dict) -> None:
     lines = [
         f"# {summary['collection'].replace('_', ' ').title()}",
         "",
-        f"Status: **{'valid' if summary['valid'] else 'invalid'}**",
+        f"Evidence status: **{'valid' if summary['valid'] else 'invalid'}**",
+        "",
+        f"Evidence complete: **{summary['evidence_complete']}**",
         "",
         "Datasets are summarized separately; three seeds do not establish statistical significance.",
         "",
@@ -1157,19 +1327,21 @@ def _write_markdown(path: Path, summary: dict) -> None:
             "## Paired comparisons",
             "",
             "| Dataset | Seed | Reference | Treatment | Speedup | Runtime reduction | "
-            "Structural | Mathematical | Bitwise | Maximum absolute difference | "
-            "Prediction identity | Checkpoint identity |",
-            "|---|---:|---|---|---:|---:|---|---|---|---:|---|---|",
+            "Execution structure | Model-state structure | Mathematical | Bitwise | "
+            "Maximum absolute difference | Prediction identity | Checkpoint identity | First divergence |",
+            "|---|---:|---|---|---:|---:|---|---|---|---|---:|---|---|---|",
         ]
     )
     for record in summary["paired_records"]:
         lines.append(
             f"| {record['dataset'].upper()} | {record['seed']} | {record['reference']} | "
             f"{record['treatment']} | {record['paired_speedup']:.12g} | "
-            f"{record['paired_runtime_reduction']:.12g} | {record['structural_identity']} | "
-            f"{record['mathematical_equivalence']} | {record['bitwise_parameter_identity']} | "
+            f"{record['paired_runtime_reduction']:.12g} | {record['execution_structural_identity']} | "
+            f"{record['model_state_structural_identity']} | {record['mathematical_equivalence']} | "
+            f"{record['bitwise_parameter_identity']} | "
             f"{record['maximum_absolute_parameter_difference']:.12g} | "
-            f"{record['prediction_identity']} | {record['checkpoint_selection_identity']} |"
+            f"{record['prediction_identity']} | {record['checkpoint_selection_identity']} | "
+            f"{record['trajectory_divergence_classification']} |"
         )
     lines.extend(
         [

@@ -236,7 +236,7 @@ The three scheduling treatments and two hierarchy treatments are sequential with
 Post-execution accounting must use Slurm's `JobID` field so array-task identities retain the `<array>_<task>` form. Both collection summarizers require `--data-root "$WORK_DIR/data"`; this rematerializes the absolute SHD and SSC roots used by the launchers before run-directory and configuration-identity validation. Exact commands are in the [reproducibility guide](../../docs/reproducibility.md#scheduling-and-hierarchical-reduction-execution).
 
 
-No execution or performance claim is recorded here. Generated summaries belong under scratch until declared collection acceptance passes.
+No execution or performance claim is recorded here. Generated summaries belong under scratch until evidence completeness passes. A complete negative treatment result remains valid evidence: candidate retention is reported separately from collection validity.
 
 ## CIFAR-10 Fed-SNN execution and evidence
 

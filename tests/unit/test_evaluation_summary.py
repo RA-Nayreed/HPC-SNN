@@ -55,7 +55,7 @@ def _write_jsonl(path, values):
     path.write_text("".join(json.dumps(value, sort_keys=True) + "\n" for value in values), encoding="utf-8")
 
 
-def _write_run(task, root, collection, allocation_index):
+def _write_run(task, root, collection, allocation_index, *, hierarchy_state_delta=5e-7):
     config = task.config
     treatment = (
         config["scheduler"]["strategy"]
@@ -66,7 +66,7 @@ def _write_run(task, root, collection, allocation_index):
     (path / "checkpoints").mkdir(parents=True)
     runtime = _runtime(collection, treatment)
     hierarchy = collection == "hierarchical_reduction_evaluation" and treatment == "node_hierarchical"
-    state = {"weight": torch.tensor([1.0 + (5e-7 if hierarchy else 0.0), 2.0])}
+    state = {"weight": torch.tensor([1.0 + (hierarchy_state_delta if hierarchy else 0.0), 2.0])}
     torch.save({"global_model_state": state}, path / "checkpoints" / "best.pt")
     model_record = {
         "model_load_count": 1,
@@ -169,7 +169,11 @@ def _write_run(task, root, collection, allocation_index):
         "client_example_counts": [2, 3],
         "client_training_examples_presented": [2, 3],
         "ordered_update_identities": ["update-a", "update-b"],
-        "global_model_identity_after_aggregation": "aggregate-identity",
+        "global_model_identity_before_aggregation": "incoming-identity",
+        "global_model_identity_after_aggregation": (
+            "aggregate-hierarchical" if hierarchy else "aggregate-identity"
+        ),
+        "aggregation_weighting": config["federated"]["aggregation_weighting"],
         "aggregation_weights": [0.4, 0.6],
         "aggregation_order": "selected_client_order",
         "validation_loss": 0.5,
@@ -278,6 +282,7 @@ def _fixture(
     *,
     runtime_data_root=None,
     accounting_job_id_field="JobIDRaw",
+    hierarchy_state_delta=5e-7,
 ):
     root = tmp_path / collection
     output = tmp_path / f"{collection}_summary"
@@ -295,7 +300,13 @@ def _fixture(
         for index, (dataset, seed) in enumerate((dataset, seed) for dataset in ("shd", "ssc") for seed in (37, 47, 57))
     }
     for task in runtime_tasks:
-        _write_run(task, root, collection, allocation_by_pair[(task.dataset, task.seed)])
+        _write_run(
+            task,
+            root,
+            collection,
+            allocation_by_pair[(task.dataset, task.seed)],
+            hierarchy_state_delta=hierarchy_state_delta,
+        )
     accounting = tmp_path / f"{collection}_accounting.txt"
     rows = [f"{accounting_job_id_field}|State|ExitCode|ElapsedRaw|AllocTRES|Start|End\n"]
     for index in range(6):
@@ -386,7 +397,11 @@ def test_scheduling_summary_calculations_and_adoption_boundaries(tmp_path, monke
 def test_hierarchical_summary_calculations_and_retention_boundaries(tmp_path, monkeypatch):
     summary, output = _fixture(tmp_path, HIERARCHY, "hierarchical_reduction_evaluation", monkeypatch)
     assert summary["valid"] and summary["allocation_count"] == 6
+    assert summary["evidence_complete"] is True
     assert summary["decision"]["decision"] == "node_hierarchical_reduction_retained"
+    assert summary["decision"]["evidence_available"] is True
+    assert summary["acceptance"]["execution_protocol_equivalence"] is True
+    assert summary["acceptance"]["aggregation_equivalence"] is True
     hierarchy_shd = next(
         value
         for value in summary["groups"]
@@ -396,12 +411,95 @@ def test_hierarchical_summary_calculations_and_retention_boundaries(tmp_path, mo
     assert hierarchy_shd["metrics"]["paired_runtime_reduction"]["mean"] == 0
     assert hierarchy_shd["metrics"]["maximum_absolute_parameter_difference"]["mean"] > 0
     assert all(value["prediction_identity"] is True for value in hierarchy_shd["paired_numerical_classifications"])
+    assert all(
+        value["execution_structural_identity"] and value["model_state_structural_identity"]
+        for value in hierarchy_shd["paired_numerical_classifications"]
+    )
+    assert all(
+        value["trajectory_divergence_classification"] == "aggregation_grouping_first_divergence"
+        and value["first_differing_client_update_round"] is None
+        and value["first_differing_aggregate_model_round"] == 1
+        for value in hierarchy_shd["paired_numerical_classifications"]
+    )
     assert (output / "hierarchical_reduction_evaluation_summary.csv").is_file()
     changed_pairs = copy.deepcopy(summary["paired_records"])
     changed_pairs[0]["runtime_regression_fraction"] = 0.021
     decision = evaluation_summary._decision("hierarchical_reduction_evaluation", summary["runs"], changed_pairs, True)
     assert decision["decision"] == "node_hierarchical_reduction_not_retained"
     assert decision["conditions"]["no_material_runtime_regression"] is False
+
+
+def test_hierarchical_negative_result_remains_complete_valid_evidence(tmp_path, monkeypatch):
+    summary, _ = _fixture(
+        tmp_path,
+        HIERARCHY,
+        "hierarchical_reduction_evaluation",
+        monkeypatch,
+        hierarchy_state_delta=0.1,
+    )
+
+    assert summary["valid"] is True
+    assert summary["evidence_complete"] is True
+    assert summary["acceptance"]["collection_valid"] is True
+    assert summary["acceptance"]["aggregation_equivalence"] is False
+    assert summary["decision"]["evidence_available"] is True
+    assert summary["decision"]["decision"] == "node_hierarchical_reduction_not_retained"
+    assert summary["decision"]["conditions"]["parameter_differences_within_tolerance"] is False
+
+
+def test_round_contribution_validation_recomputes_exact_weights():
+    config = {"federated": {"clients_per_round": 2, "aggregation_weighting": "example_count"}}
+    record = {
+        "round_number": 1,
+        "selected_client_ids": ["a", "b"],
+        "ordered_update_identities": ["update-a", "update-b"],
+        "client_example_counts": [2, 3],
+        "aggregation_weighting": "example_count",
+        "aggregation_weights": [0.4, 0.6],
+        "aggregation_order": "selected_client_order",
+        "global_model_identity_before_aggregation": "before",
+        "global_model_identity_after_aggregation": "after",
+    }
+
+    evaluation_summary._validate_round_contributions(record, config)
+
+    missing = copy.deepcopy(record)
+    missing["ordered_update_identities"] = ["update-a"]
+    with pytest.raises(ValueError, match="exactly one update"):
+        evaluation_summary._validate_round_contributions(missing, config)
+
+    wrong_weights = copy.deepcopy(record)
+    wrong_weights["aggregation_weights"] = [0.5, 0.5]
+    with pytest.raises(ValueError, match="differ from exact example_count weights"):
+        evaluation_summary._validate_round_contributions(wrong_weights, config)
+
+
+def test_trajectory_diagnostics_distinguish_grouping_from_client_update_divergence():
+    reference = {
+        "incoming_model_identities": ["initial", "flat-round-1"],
+        "update_identities": [["round-1-update"], ["flat-round-2-update"]],
+        "aggregate_model_identities": ["flat-round-1", "flat-round-2"],
+    }
+    grouping = {
+        "incoming_model_identities": ["initial", "hierarchical-round-1"],
+        "update_identities": [["round-1-update"], ["hierarchical-round-2-update"]],
+        "aggregate_model_identities": ["hierarchical-round-1", "hierarchical-round-2"],
+    }
+    grouping_diagnostics = evaluation_summary._trajectory_diagnostics(reference, grouping)
+    assert grouping_diagnostics["trajectory_divergence_classification"] == (
+        "aggregation_grouping_first_divergence"
+    )
+    assert grouping_diagnostics["first_differing_aggregate_model_round"] == 1
+    assert grouping_diagnostics["first_differing_client_update_round"] == 2
+
+    client_update = copy.deepcopy(reference)
+    client_update["update_identities"][0] = ["different-round-1-update"]
+    client_update["aggregate_model_identities"][0] = "different-round-1-aggregate"
+    update_diagnostics = evaluation_summary._trajectory_diagnostics(reference, client_update)
+    assert update_diagnostics["trajectory_divergence_classification"] == (
+        "client_update_divergence_before_aggregation"
+    )
+    assert update_diagnostics["first_differing_client_update_round"] == 1
 
 
 @pytest.mark.parametrize(
