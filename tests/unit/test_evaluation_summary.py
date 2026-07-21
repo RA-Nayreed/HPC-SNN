@@ -270,19 +270,34 @@ def _write_run(task, root, collection, allocation_index):
     _write_jsonl(path / "client_metrics.jsonl", client_records)
 
 
-def _fixture(tmp_path, manifest, collection, monkeypatch):
+def _fixture(
+    tmp_path,
+    manifest,
+    collection,
+    monkeypatch,
+    *,
+    runtime_data_root=None,
+    accounting_job_id_field="JobIDRaw",
+):
     root = tmp_path / collection
     output = tmp_path / f"{collection}_summary"
     root.mkdir()
     tasks = _tasks(manifest, root)
+    runtime_tasks = tasks
+    if runtime_data_root is not None:
+        runtime_tasks = []
+        for task in tasks:
+            config = copy.deepcopy(task.config)
+            config["dataset"]["root"] = str(runtime_data_root / task.dataset)
+            runtime_tasks.append(replace(task, config=config))
     allocation_by_pair = {
         (dataset, seed): index
         for index, (dataset, seed) in enumerate((dataset, seed) for dataset in ("shd", "ssc") for seed in (37, 47, 57))
     }
-    for task in tasks:
+    for task in runtime_tasks:
         _write_run(task, root, collection, allocation_by_pair[(task.dataset, task.seed)])
     accounting = tmp_path / f"{collection}_accounting.txt"
-    rows = ["JobIDRaw|State|ExitCode|ElapsedRaw|AllocTRES|Start|End\n"]
+    rows = [f"{accounting_job_id_field}|State|ExitCode|ElapsedRaw|AllocTRES|Start|End\n"]
     for index in range(6):
         rows.append(f"900_{index}|COMPLETED|0:0|100|billing=1,gres/gpu=4|2026-01-01T00:00:00|2026-01-01T00:01:40\n")
     accounting.write_text("".join(rows), encoding="utf-8")
@@ -292,6 +307,7 @@ def _fixture(tmp_path, manifest, collection, monkeypatch):
         root,
         output,
         slurm_accounting=accounting,
+        data_root=runtime_data_root,
     )
     return summary, output
 
@@ -386,6 +402,45 @@ def test_hierarchical_summary_calculations_and_retention_boundaries(tmp_path, mo
     decision = evaluation_summary._decision("hierarchical_reduction_evaluation", summary["runs"], changed_pairs, True)
     assert decision["decision"] == "node_hierarchical_reduction_not_retained"
     assert decision["conditions"]["no_material_runtime_regression"] is False
+
+
+@pytest.mark.parametrize(
+    ("manifest", "collection"),
+    [
+        (SCHEDULING, "scheduling_evaluation"),
+        (HIERARCHY, "hierarchical_reduction_evaluation"),
+    ],
+)
+def test_summary_materializes_runtime_data_root_and_accepts_native_slurm_job_id(
+    tmp_path, monkeypatch, manifest, collection
+):
+    runtime_data_root = tmp_path / "runtime-data"
+    summary, output = _fixture(
+        tmp_path,
+        manifest,
+        collection,
+        monkeypatch,
+        runtime_data_root=runtime_data_root,
+        accounting_job_id_field="JobID",
+    )
+    assert summary["valid"] is True
+    provenance_path = output / f"{collection}_provenance.json"
+    provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    assert provenance["runtime_dataset_roots"] == {
+        "shd": str(runtime_data_root / "shd"),
+        "ssc": str(runtime_data_root / "ssc"),
+    }
+    assert provenance["slurm_accounting_job_id_field"] == "JobID"
+
+
+def test_summary_rejects_relative_runtime_data_root(tmp_path):
+    with pytest.raises(ValueError, match="runtime data root must be an absolute path"):
+        evaluation_summary.summarize_evaluation(
+            SCHEDULING,
+            tmp_path / "runs",
+            tmp_path / "summary",
+            data_root="data",
+        )
 
 
 @pytest.mark.parametrize(

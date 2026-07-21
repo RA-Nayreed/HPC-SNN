@@ -312,14 +312,14 @@ squeue --job <SCHEDULING_JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %
 squeue --job <HIERARCHICAL_JOB_ID> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
 mkdir -p "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation" "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation"
 sacct -j <SCHEDULING_JOB_ID> -X --array --parsable2 \
-  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
+  --format=JobID,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
   > "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation/slurm-accounting.txt"
 sacct -j <HIERARCHICAL_JOB_ID> -X --array --parsable2 \
-  --format=JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
+  --format=JobID,State,ExitCode,ElapsedRaw,AllocTRES,Start,End \
   > "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation/slurm-accounting.txt"
 ~~~
 
-`sacct -X` retains only array-task allocation parents, excluding individual `srun` step rows. Thus each dataset/seed allocation appears once even though it contains three scheduling treatments or two hierarchy treatments. The summarizer records `slurm_allocation_elapsed_seconds` and `slurm_allocation_gpu_hours` only on that allocation. Treatments record `internal_treatment_duration_seconds` and `derived_treatment_gpu_exposure_hours`; the latter is duration times four GPUs and is not separately billed Slurm accounting. For each allocation it calculates `allocation_initialization_seconds`, `between_treatment_overhead_seconds`, `remaining_allocation_overhead_seconds`, and `allocation_reconciliation_error_seconds`, and requires their sum with all internal treatment durations to equal allocation elapsed time within the declared two-second tolerance. Total billed GPU-hours sum the six allocation records once.
+`sacct -X` retains only array-task allocation parents, excluding individual `srun` step rows. Roihu's `JobID` field preserves array-task identifiers such as `301305_0`; its `JobIDRaw` field can instead contain the underlying allocation record identifier and must not be used for this join. Thus each dataset/seed allocation appears once even though it contains three scheduling treatments or two hierarchy treatments. The summarizer records `slurm_allocation_elapsed_seconds` and `slurm_allocation_gpu_hours` only on that allocation. Treatments record `internal_treatment_duration_seconds` and `derived_treatment_gpu_exposure_hours`; the latter is duration times four GPUs and is not separately billed Slurm accounting. For each allocation it calculates `allocation_initialization_seconds`, `between_treatment_overhead_seconds`, `remaining_allocation_overhead_seconds`, and `allocation_reconciliation_error_seconds`, and requires their sum with all internal treatment durations to equal allocation elapsed time within the declared two-second tolerance. Total billed GPU-hours sum the six allocation records once.
 
 The scheduling decision artifact preserves all six dataset/seed reductions. Its 5% gate uses the arithmetic mean of three paired reductions separately within SHD and SSC; its improvement-count gate requires at least two positive seeds separately in each dataset; and its slowdown gate requires every individual dataset/seed reduction to be at least -2%. Datasets are never pooled.
 
@@ -329,11 +329,13 @@ After every task completes, validate and summarize into scratch, not the reposit
 fedapfa-summarize-scheduling-evaluation \
   --manifest experiments/scheduling_evaluation/manifest.yaml \
   --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/scheduling_evaluation" \
+  --data-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/data" \
   --slurm-accounting "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation/slurm-accounting.txt" \
   --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/scheduling_evaluation"
 fedapfa-summarize-hierarchical-reduction \
   --manifest experiments/hierarchical_reduction_evaluation/manifest.yaml \
   --runs-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/runs/hierarchical_reduction_evaluation" \
+  --data-root "/scratch/$CSC_PROJECT/$USER/hpc-snn/data" \
   --slurm-accounting "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation/slurm-accounting.txt" \
   --output-dir "/scratch/$CSC_PROJECT/$USER/hpc-snn/generated-evidence/hierarchical_reduction_evaluation"
 ~~~

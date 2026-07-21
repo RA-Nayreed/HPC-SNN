@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import copy
 import csv
 import hashlib
 import json
 import math
 import statistics
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 
@@ -18,12 +20,11 @@ from fedapfa.configuration import (
     validate_resolved_evaluation_pair,
 )
 from fedapfa.distributed.process_context import allocated_gpu_uuids, canonical_gpu_uuid
-from fedapfa.federated.checkpointing import configuration_identity
 from fedapfa.federated.aggregation import aggregation_tensor_policy
+from fedapfa.federated.checkpointing import configuration_identity
 from fedapfa.federated.numerical_equivalence import classify_model_states, prediction_identity
 from fedapfa.scheduling.base import EVENT_STRUCTURE_FEATURES
 from fedapfa.utilities.run_records import run_directory
-
 
 ALLOCATION_RECONCILIATION_TOLERANCE_SECONDS = 2.0
 
@@ -88,17 +89,31 @@ def _timestamp(value: str, label: str) -> float:
         raise ValueError(f"Slurm {label} timestamp is invalid") from error
 
 
-def _slurm_accounting(path: str | Path) -> tuple[dict[str, dict], str]:
+def _slurm_accounting(path: str | Path) -> tuple[dict[str, dict], str, str]:
     source = Path(path)
     digest = hashlib.sha256(source.read_bytes()).hexdigest()
     with source.open(encoding="utf-8", newline="") as handle:
-        rows = list(csv.DictReader(handle, delimiter="|"))
-    required = {"JobIDRaw", "State", "ExitCode", "ElapsedRaw", "AllocTRES", "Start", "End"}
+        reader = csv.DictReader(handle, delimiter="|")
+        rows = list(reader)
+        fields = set(reader.fieldnames or ())
+    identifier_fields = fields.intersection({"JobID", "JobIDRaw"})
+    if len(identifier_fields) != 1:
+        raise ValueError("Slurm accounting must contain exactly one of JobID or JobIDRaw")
+    identifier_field = identifier_fields.pop()
+    required = {
+        identifier_field,
+        "State",
+        "ExitCode",
+        "ElapsedRaw",
+        "AllocTRES",
+        "Start",
+        "End",
+    }
     if not rows or any(not required.issubset(row) for row in rows):
         raise ValueError("Slurm accounting fields are incomplete")
     records = {}
     for row in rows:
-        job_id = row["JobIDRaw"]
+        job_id = row[identifier_field]
         if not job_id or "." in job_id or "_" not in job_id:
             continue
         if job_id in records:
@@ -121,8 +136,24 @@ def _slurm_accounting(path: str | Path) -> tuple[dict[str, dict], str]:
             "end_unix_seconds": _timestamp(row["End"], "end"),
         }
     if not records:
-        raise ValueError("Slurm accounting contains no array-task records")
-    return records, digest
+        raise ValueError(
+            "Slurm accounting contains no array-task records; use JobID when JobIDRaw omits array indices"
+        )
+    return records, digest, identifier_field
+
+
+def _materialize_runtime_data_root(tasks: list, data_root: str | Path | None) -> list:
+    if data_root is None:
+        return tasks
+    root = Path(data_root)
+    if not root.is_absolute():
+        raise ValueError("runtime data root must be an absolute path")
+    materialized = []
+    for task in tasks:
+        config = copy.deepcopy(task.config)
+        config["dataset"]["root"] = str(root / task.dataset)
+        materialized.append(replace(task, config=config))
+    return materialized
 
 
 def _state(path: Path, final: dict) -> dict[str, torch.Tensor]:
@@ -548,7 +579,7 @@ def _reconcile_allocation(record: dict, runs: list[dict], collection: str) -> di
     allocation_end = record["end_unix_seconds"]
     initialization = ordered[0]["execution_start_unix_seconds"] - allocation_start
     between_intervals = []
-    for previous, following in zip(ordered, ordered[1:]):
+    for previous, following in zip(ordered, ordered[1:], strict=False):
         between_intervals.append(
             following["execution_start_unix_seconds"] - previous["execution_end_unix_seconds"]
         )
@@ -807,8 +838,10 @@ def summarize_evaluation(
     output_dir: str | Path,
     *,
     slurm_accounting: str | Path | None = None,
+    data_root: str | Path | None = None,
 ) -> dict:
     tasks = load_evaluation_manifest(manifest)
+    tasks = _materialize_runtime_data_root(tasks, data_root)
     collection = tasks[0].config["evaluation"]["collection"]
     root = Path(runs_root)
     output = Path(output_dir)
@@ -822,11 +855,12 @@ def summarize_evaluation(
             findings.append(f"{task.experiment} seed {task.seed}: {error}")
     accounting = {}
     accounting_hash = None
+    accounting_identifier_field = None
     if slurm_accounting is None:
         findings.append("Slurm accounting was not supplied")
     else:
         try:
-            accounting, accounting_hash = _slurm_accounting(slurm_accounting)
+            accounting, accounting_hash, accounting_identifier_field = _slurm_accounting(slurm_accounting)
         except (FileNotFoundError, KeyError, TypeError, ValueError) as error:
             findings.append(f"Slurm accounting: {error}")
     used_accounting = set()
@@ -1046,6 +1080,11 @@ def summarize_evaluation(
         "allocation_count": len(unique_allocations),
         "git_commits": sorted({value["git_commit"] for value in runs if value["git_commit"]}),
         "model_hashes": sorted({value["scheduler_model"]["model_sha256"] for value in runs}),
+        "runtime_dataset_roots": {
+            dataset: next(task.config["dataset"]["root"] for task in tasks if task.dataset == dataset)
+            for dataset in ("shd", "ssc")
+        },
+        "slurm_accounting_job_id_field": accounting_identifier_field,
         "slurm_accounting_sha256": accounting_hash,
     }
     (output / f"{stem}_provenance.json").write_text(
