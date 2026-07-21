@@ -1,0 +1,13 @@
+{
+  "aggregation_equivalence": false,
+  "collection_valid": true,
+  "evidence_complete": true,
+  "execution_completion": true,
+  "execution_protocol_equivalence": true,
+  "hypothesis_decision": "node_hierarchical_reduction_not_retained",
+  "measurement_completeness": true,
+  "official_test_isolation": true,
+  "provenance_completeness": true,
+  "scheduler_equivalence": true,
+  "validation_findings": []
+}

@@ -1,0 +1,96 @@
+{
+  "conditions": {
+    "all_structural_and_scientific_equivalence": true,
+    "exact_dataset_seed_pair_coverage": true,
+    "no_dataset_seed_pair_more_than_two_percent_slower": false,
+    "not_slower_than_example_count_each_dataset": false,
+    "permitted_pre_execution_information_only": true,
+    "predictions_and_checkpoints_identical": true,
+    "scheduler_overhead_below_one_percent": false,
+    "shd_runtime_improvement_at_least_five_percent": true,
+    "ssc_runtime_improvement_at_least_five_percent": false,
+    "two_of_three_seeds_improve_each_dataset": false
+  },
+  "dataset_mean_paired_runtime_reductions": {
+    "shd": 0.05441907281495685,
+    "ssc": -0.05567477845292024
+  },
+  "decision": "event_structure_scheduler_not_adopted",
+  "evidence_available": true,
+  "example_count_dataset_mean_paired_runtime_reductions": {
+    "shd": 0.07471781494336514,
+    "ssc": 0.04867456545874597
+  },
+  "improved_seed_counts_by_dataset": {
+    "shd": 2,
+    "ssc": 0
+  },
+  "paired_dataset_seed_runtime_reductions": [
+    {
+      "dataset": "shd",
+      "paired_runtime_reduction": -0.006804693880257396,
+      "seed": 37
+    },
+    {
+      "dataset": "shd",
+      "paired_runtime_reduction": 0.09869076209588552,
+      "seed": 47
+    },
+    {
+      "dataset": "shd",
+      "paired_runtime_reduction": 0.07137115022924242,
+      "seed": 57
+    },
+    {
+      "dataset": "ssc",
+      "paired_runtime_reduction": -0.04894318424237607,
+      "seed": 37
+    },
+    {
+      "dataset": "ssc",
+      "paired_runtime_reduction": -0.07239448369531228,
+      "seed": 47
+    },
+    {
+      "dataset": "ssc",
+      "paired_runtime_reduction": -0.04568666742107237,
+      "seed": 57
+    }
+  ],
+  "pairing_semantics": {
+    "candidate_treatment": "event_structure_longest_processing_time",
+    "dataset_mean_definition": "arithmetic mean of the three paired runtime reductions within each dataset",
+    "datasets_pooled": false,
+    "minimum_allowed_paired_runtime_reduction": -0.02,
+    "pairing_unit": "dataset_seed",
+    "reference_treatment": "round_robin",
+    "required_improved_seeds_per_dataset": 2,
+    "required_pair_keys": [
+      {
+        "dataset": "shd",
+        "seed": 37
+      },
+      {
+        "dataset": "shd",
+        "seed": 47
+      },
+      {
+        "dataset": "shd",
+        "seed": 57
+      },
+      {
+        "dataset": "ssc",
+        "seed": 37
+      },
+      {
+        "dataset": "ssc",
+        "seed": 47
+      },
+      {
+        "dataset": "ssc",
+        "seed": 57
+      }
+    ],
+    "seed_improvement_definition": "paired runtime reduction is strictly greater than zero"
+  }
+}

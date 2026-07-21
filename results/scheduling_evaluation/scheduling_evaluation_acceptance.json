@@ -1,0 +1,13 @@
+{
+  "aggregation_equivalence": true,
+  "collection_valid": true,
+  "evidence_complete": true,
+  "execution_completion": true,
+  "execution_protocol_equivalence": true,
+  "hypothesis_decision": "event_structure_scheduler_not_adopted",
+  "measurement_completeness": true,
+  "official_test_isolation": true,
+  "provenance_completeness": true,
+  "scheduler_equivalence": true,
+  "validation_findings": []
+}

@@ -1,0 +1,17 @@
+{
+  "allocation_count": 6,
+  "collection": "scheduling_evaluation",
+  "git_commits": [
+    "d06ddcc775cc400c2188a6f104c2665041137ea7"
+  ],
+  "model_hashes": [
+    "78ad111c6997999e017b7b29c07fadfdab86a11a83c128b06e2b8924d4a1471c"
+  ],
+  "run_count": 18,
+  "runtime_dataset_roots": {
+    "shd": "/scratch/project_2015302/rnayreed/hpc-snn/data/shd",
+    "ssc": "/scratch/project_2015302/rnayreed/hpc-snn/data/ssc"
+  },
+  "slurm_accounting_job_id_field": "JobID",
+  "slurm_accounting_sha256": "3bbaa8773fac4535f3f5b4f36d397d83cadb51f9cb763cf0e98daeccca9f86a1"
+}

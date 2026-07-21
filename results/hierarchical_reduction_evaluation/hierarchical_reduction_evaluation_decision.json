@@ -1,0 +1,15 @@
+{
+  "conditions": {
+    "every_update_once": true,
+    "logical_inter_node_movement_reduced": true,
+    "no_material_runtime_regression": false,
+    "official_predictions_agree": false,
+    "official_test_ownership_preserved": true,
+    "parameter_differences_within_tolerance": false,
+    "selected_checkpoints_agree": false,
+    "structural_and_mathematical_equivalence": false,
+    "weights_and_denominators_correct": true
+  },
+  "decision": "node_hierarchical_reduction_not_retained",
+  "evidence_available": true
+}
