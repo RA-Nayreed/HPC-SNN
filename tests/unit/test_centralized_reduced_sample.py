@@ -130,7 +130,7 @@ def test_reduced_sample_limits_and_test_waits_for_selection(tmp_path):
     cfg = config(tmp_path, "reduced_sample_evaluation")
     data = SyntheticEvents(64)
     run_path = Path(cfg["output_root"])
-    placeholder = DatasetBundle(
+    empty_bundle = DatasetBundle(
         data,
         data,
         None,
@@ -138,7 +138,7 @@ def test_reduced_sample_limits_and_test_waits_for_selection(tmp_path):
         {"protocol": "reduced_sample_evaluation", "official_test_accessed": False, "scientific_result": False},
     )
     run = initialize_run(cfg, {}, "reduced-sample command")
-    result = train_centralized(LinearEventModel(), placeholder, cfg, run)
+    result = train_centralized(LinearEventModel(), empty_bundle, cfg, run)
     record = json.loads((run / "metrics.jsonl").read_text().splitlines()[0])
     assert record["train"]["batches"] == 2 and record["validation"]["batches"] == 1 and result["accepted"]
     scientific = config(run_path / "scientific", "reduced_sample_evaluation")

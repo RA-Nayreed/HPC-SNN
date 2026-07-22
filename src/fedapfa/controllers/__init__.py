@@ -1,1 +1,0 @@
-"""HPC-SNN subsystem."""
