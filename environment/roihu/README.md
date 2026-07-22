@@ -287,3 +287,39 @@ python3 -m fedapfa.cli.train_centralized \
 ~~~
 
 The centralized configuration is separate from the completed six-task Fed-SNN evidence and must not be pooled with it.
+
+## Week 7 scaling and non-IID allocations
+
+The locally verified implementation is prospective. No Week 7 scientific execution or result exists, no scaling, energy, accuracy, or adoption conclusion is claimed, and existing Weeks 1–6 evidence remains unchanged and is not Week 7 evidence.
+
+All launchers use `gpumedium`, `"$VENV/bin/python3" -m torch.distributed.run`, `TORCH_NCCL_ASYNC_ERROR_HANDLING=1`, explicit CPU-thread settings, one process per physical GPU, and no CUDA MPS, MPI, or custom OpenMP. The system-scaling layouts are one node/one GPU/72 CPU cores/217086M, one node/two GPUs/144 cores/434172M, one node/four GPUs/288 cores/868344M, and two nodes/two GPUs per node/144 cores and 434172M per node-side task. The non-IID array uses one node/four GPUs/288 cores/868344M and executes four treatments sequentially per allocation.
+
+Load the established project environment, export the work root, and first submit the four topology-specific calibrations:
+
+~~~bash
+module load python-pytorch/2.10
+export WORK_DIR="/scratch/$CSC_PROJECT/$USER/hpc-snn"
+export FEDAPFA_VENV="/projappl/$CSC_PROJECT/$USER/hpc-snn-venv"
+bash scripts/slurm/submit_roihu_comparative_calibration.sh
+~~~
+
+After the compatible calibration artifacts pass, submit the independent matrices:
+
+~~~bash
+bash scripts/slurm/submit_roihu_system_scaling_energy.sh \
+  --work-dir "$WORK_DIR"
+bash scripts/slurm/submit_roihu_non_iid_energy.sh \
+  --work-dir "$WORK_DIR"
+~~~
+
+Each wrapper validates the manifest, project interpreter, imports, local datasets, CUDA build, allocated UUID coverage, process mapping, writable temporary storage, and calibration identity. Scaling submits four six-task arrays, producing 24 allocations. Non-IID submits one six-task array, producing six allocations and 24 fresh sequential executions. `--max-parallel N` is optional and operational only; no default `%1` limit is inserted.
+
+Monitor and collect all allocation and resume job IDs without collapsing array-task identities:
+
+~~~bash
+squeue --job <JOB_IDS> --array -o "%.18i %.9P %.28j %.2t %.10M %.10l %R"
+sacct -j <JOB_IDS> -X --parsable2 \
+  --format=JobID,JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES,Start,End,NodeList
+~~~
+
+The [reproducibility guide](../../docs/reproducibility.md#week-7-prospective-execution) provides the exact summary and explicit figure commands. Generated evidence belongs under `$WORK_DIR/generated-evidence`; no local verification command writes scientific results.

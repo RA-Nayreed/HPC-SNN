@@ -1,0 +1,13 @@
+include:
+  - ../system_scaling_energy_evaluation/base.yaml
+output_root: runs/non_iid_energy_evaluation
+pairing_group: non_iid_energy_evaluation
+comparative_evaluation:
+  collection: non_iid_energy_evaluation
+  treatment_id: dirichlet_alpha_0_5
+  comparison_reference: declared_by_dataset_configuration
+  allocation_grouping: four_sequential_executions_per_allocation
+  execution_order_design: rotated_order
+  evidence_complete_outcome: non_iid_energy_characterization_complete
+metadata:
+  purpose: non_iid_energy_evaluation

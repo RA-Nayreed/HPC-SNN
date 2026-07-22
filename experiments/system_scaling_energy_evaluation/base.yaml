@@ -1,0 +1,128 @@
+output_root: runs/system_scaling_energy_evaluation
+pairing_group: system_scaling_energy_evaluation
+parallel_execution:
+  node_count: 1
+  devices_per_node: 4
+  device_count: 4
+  client_processes_per_device: 1
+  process_count: 4
+  control_backend: nccl
+  cuda_process_service: none
+  client_assignment: example_count_longest_processing_time
+  aggregation_order: selected_client_order
+  aggregation_topology: flat_ordered
+  rank_mapping: node_major_local_rank
+  synchronize_each_round: true
+execution_measurement:
+  profiler_enabled: false
+  profiled_rounds: []
+  record_cuda_memory: true
+  record_device_utilization: true
+  utilization_interval_seconds: 0.1
+energy_measurement:
+  sampling_backend: nvml
+  sampling_interval_ms: 100
+  maximum_sample_gap_ms: 250
+  idle_before_seconds: 30
+  idle_after_seconds: 30
+  boundary_reconciliation_tolerance_joules: 0.000001
+  node_file_schema_version: 1
+  require_leading_and_trailing_samples: true
+  require_cumulative_energy_crosscheck_when_supported: true
+calibration_requirements:
+  required: true
+  paired_repetitions: 10
+  alternating_order: true
+  exclude_warmups: true
+  maximum_median_runtime_overhead_fraction: 0.02
+  minimum_interval_coverage_fraction: 0.90
+  require_update_identity: true
+  official_test_access_count: 0
+  node_count: 1
+  device_count: 4
+  process_count: 4
+  sampling_interval_ms: 100
+  sampler_topology: 1_node_4_device_node_local
+scheduler:
+  strategy: example_count_longest_processing_time
+  tie_breaking_version: cost_position_client_then_load_count_rank_v1
+  predictions_before_client_training: true
+  training_data_only: true
+  cost_model:
+    name: event_structure
+    artifact_path: results/resource_measurement/client_cost_model.json
+    expected_sha256: 78ad111c6997999e017b7b29c07fadfdab86a11a83c128b06e2b8924d4a1471c
+    schema_version: 1
+    target: client_wall_time_seconds
+    feature_order:
+      - example_count
+      - local_batch_count
+      - total_raw_input_events
+      - mean_sequence_length
+      - median_sequence_length
+      - maximum_sequence_length
+      - total_valid_time_bins
+      - estimated_padded_time_bins
+      - padding_fraction
+      - event_density
+    fitting_seeds: [7, 17]
+    excluded_evaluation_seed: 27
+    source_execution_commit: 3ddae173c89125bc69922d80bde5732ed6cd050e
+    provenance_artifact_path: results/resource_measurement/cost_model_evaluation.json
+    expected_provenance_sha256: 1488d3542e5b0770ab750b9d3812aeeac86bc091e3a11954e1f8a6a73ba9f924
+    total_accepted_rows: 6000
+    model_fitting_rows: 4000
+    untouched_evaluation_rows: 2000
+    compatible_dataset_models:
+      shd: lif_2layer
+      ssc: lif_2layer_128
+aggregation_execution:
+  topology: flat_ordered
+  order_policy: selected_client_order
+  accumulator_dtype: float64
+  absolute_tolerance: 0.000001
+  relative_tolerance: 0.00001
+  material_runtime_regression_fraction: 0.02
+frozen_model_diagnostics:
+  runtime:
+    model_path: results/resource_measurement/client_cost_model.json
+    model_sha256: 78ad111c6997999e017b7b29c07fadfdab86a11a83c128b06e2b8924d4a1471c
+    provenance_path: results/resource_measurement/cost_model_evaluation.json
+    provenance_sha256: 1488d3542e5b0770ab750b9d3812aeeac86bc091e3a11954e1f8a6a73ba9f924
+    feature_order: &frozen_features
+      - example_count
+      - local_batch_count
+      - total_raw_input_events
+      - mean_sequence_length
+      - median_sequence_length
+      - maximum_sequence_length
+      - total_valid_time_bins
+      - estimated_padded_time_bins
+      - padding_fraction
+      - event_density
+    fitting_seeds: [7, 17]
+    evaluation_seed: 27
+    target: client_wall_time_seconds
+    use_for_assignment: false
+    evaluation_role: transfer_evaluation_only
+  gross_energy:
+    model_path: results/resource_measurement/energy_cost_model.json
+    model_sha256: 11aba31e19c5123103552a898b18f732de86b2d73d57cf416ab61deac69eedf1
+    provenance_path: results/resource_measurement/cost_model_evaluation.json
+    provenance_sha256: 1488d3542e5b0770ab750b9d3812aeeac86bc091e3a11954e1f8a6a73ba9f924
+    feature_order: *frozen_features
+    fitting_seeds: [7, 17]
+    evaluation_seed: 27
+    target: gross_energy_joules
+    use_for_assignment: false
+    evaluation_role: transfer_evaluation_only
+comparative_evaluation:
+  collection: system_scaling_energy_evaluation
+  treatment_id: one_node_four_gpu
+  comparison_reference: declared_by_dataset_configuration
+  allocation_grouping: one_execution_per_allocation
+  execution_order_design: independent_allocations
+  resolved_configuration_whitelist_version: resolved_leaf_paths_v1
+  evidence_complete_outcome: system_scaling_energy_characterization_complete
+metadata:
+  purpose: system_scaling_energy_evaluation

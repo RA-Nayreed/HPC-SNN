@@ -1,0 +1,9 @@
+include:
+  - ../../distributed_evaluation/ssc/lif_128_fedavg_reference.yaml
+  - ../base.yaml
+name: ssc_lif_128_non_iid_dirichlet_alpha_0_5
+comparative_evaluation:
+  treatment_id: dirichlet_alpha_0_5
+  comparison_reference: ssc_lif_128_non_iid_iid
+metadata:
+  experiment: ssc_lif_128_non_iid_dirichlet_alpha_0_5

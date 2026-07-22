@@ -1,0 +1,37 @@
+schema_version: 1
+collection: non_iid_energy_evaluation
+seeds_file: seeds.yaml
+experiments:
+  - {id: shd_lif_non_iid_iid, config: shd/lif_iid.yaml, mandatory: true}
+  - {id: shd_lif_non_iid_dirichlet_alpha_1_0, config: shd/lif_dirichlet_alpha_1_0.yaml, mandatory: true}
+  - {id: shd_lif_non_iid_dirichlet_alpha_0_5, config: shd/lif_dirichlet_alpha_0_5.yaml, mandatory: true}
+  - {id: shd_lif_non_iid_dirichlet_alpha_0_1, config: shd/lif_dirichlet_alpha_0_1.yaml, mandatory: true}
+  - {id: ssc_lif_128_non_iid_iid, config: ssc/lif_128_iid.yaml, mandatory: true}
+  - {id: ssc_lif_128_non_iid_dirichlet_alpha_1_0, config: ssc/lif_128_dirichlet_alpha_1_0.yaml, mandatory: true}
+  - {id: ssc_lif_128_non_iid_dirichlet_alpha_0_5, config: ssc/lif_128_dirichlet_alpha_0_5.yaml, mandatory: true}
+  - {id: ssc_lif_128_non_iid_dirichlet_alpha_0_1, config: ssc/lif_128_dirichlet_alpha_0_1.yaml, mandatory: true}
+allocations:
+  - allocation_index: 0
+    dataset: shd
+    seed: 37
+    execution_order: [iid, dirichlet_alpha_1_0, dirichlet_alpha_0_5, dirichlet_alpha_0_1]
+  - allocation_index: 1
+    dataset: shd
+    seed: 47
+    execution_order: [dirichlet_alpha_1_0, dirichlet_alpha_0_1, iid, dirichlet_alpha_0_5]
+  - allocation_index: 2
+    dataset: shd
+    seed: 57
+    execution_order: [dirichlet_alpha_0_5, iid, dirichlet_alpha_0_1, dirichlet_alpha_1_0]
+  - allocation_index: 3
+    dataset: ssc
+    seed: 37
+    execution_order: [iid, dirichlet_alpha_1_0, dirichlet_alpha_0_5, dirichlet_alpha_0_1]
+  - allocation_index: 4
+    dataset: ssc
+    seed: 47
+    execution_order: [dirichlet_alpha_1_0, dirichlet_alpha_0_1, iid, dirichlet_alpha_0_5]
+  - allocation_index: 5
+    dataset: ssc
+    seed: 57
+    execution_order: [dirichlet_alpha_0_5, iid, dirichlet_alpha_0_1, dirichlet_alpha_1_0]

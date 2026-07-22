@@ -32,11 +32,17 @@ def calibrate_measurement(
     minimum_samples: int = 10,
     minimum_sample_fraction: float = 0.9,
     device: torch.device | None = None,
+    expected_gpu_count: int = 1,
+    topology: dict | None = None,
+    execution_commit: str | None = None,
 ) -> dict:
     """Warm both paths, then alternate recorded pairs with exact state restoration."""
 
     if repetitions < 10:
         raise ValueError("calibration requires at least ten paired repetitions")
+    if expected_gpu_count <= 0:
+        raise ValueError("calibration expected GPU count must be positive")
+    topology = {} if topology is None else dict(topology)
     initial_state = copy.deepcopy(model.state_dict())
     initial_rng = global_rng_state(device if device is not None and device.type == "cuda" else None)
     observations: list[CalibrationObservation] = []
@@ -91,7 +97,7 @@ def calibrate_measurement(
         errors.append("median_runtime_overhead_exceeded")
     if sample_fraction < minimum_sample_fraction:
         errors.append("sample_count_coverage_failed")
-    if len(uuids) != 1:
+    if len(uuids) != expected_gpu_count:
         errors.append("gpu_uuid_count_failed")
     if not all(value.updates_identical for value in observations):
         errors.append("measured_update_identity_failed")
@@ -111,6 +117,12 @@ def calibrate_measurement(
         "minimum_samples_per_client": minimum_samples,
         "sample_coverage_fraction": sample_fraction,
         "gpu_uuids": sorted(uuids),
+        "node_count": topology.get("node_count", 1),
+        "device_count": topology.get("device_count", expected_gpu_count),
+        "process_count": topology.get("process_count", expected_gpu_count),
+        "sampler_topology": topology.get("sampler_topology", "single_device_process"),
+        "sampling_interval_ms": topology.get("sampling_interval_ms", 100),
+        "execution_commit": execution_commit,
         "sampling_errors": [],
         "updates_numerically_identical": all(value.updates_identical for value in observations),
         "official_test_access_count": 0,

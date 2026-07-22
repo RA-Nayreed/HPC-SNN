@@ -1,0 +1,13 @@
+include:
+  - ../../distributed_evaluation/ssc/lif_128_fedavg_reference.yaml
+  - ../base.yaml
+name: ssc_lif_128_non_iid_iid
+federated:
+  partition:
+    method: stratified_iid
+    alpha: null
+comparative_evaluation:
+  treatment_id: iid
+  comparison_reference: ssc_lif_128_non_iid_iid
+metadata:
+  experiment: ssc_lif_128_non_iid_iid

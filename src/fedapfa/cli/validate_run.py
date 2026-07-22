@@ -6,6 +6,7 @@ from fedapfa.configuration import (
     experiment_id,
     load_config,
     load_resolved_config,
+    validate_comparative_evaluation_config,
     validate_distributed_evaluation_config,
     validate_evaluation_config,
     validate_federated_config,
@@ -21,6 +22,8 @@ def main() -> None:
     if candidate.get("execution") == "federated":
         if "resource_measurement" in candidate:
             validate_resource_measurement_config(candidate)
+        elif "comparative_evaluation" in candidate:
+            validate_comparative_evaluation_config(candidate)
         elif "evaluation" in candidate:
             validate_evaluation_config(candidate)
         elif "parallel_execution" in candidate:

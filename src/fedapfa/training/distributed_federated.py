@@ -15,6 +15,8 @@ import torch
 import torch.distributed as dist
 
 from fedapfa.configuration import (
+    comparative_execution_identity,
+    comparative_scientific_identity,
     distributed_execution_identity,
     distributed_scientific_identity,
     evaluation_execution_identity,
@@ -36,7 +38,7 @@ from fedapfa.distributed.hierarchical_reduction import (
     node_client_records,
     serialized_payload_bytes,
 )
-from fedapfa.distributed.process_context import ProcessContext
+from fedapfa.distributed.process_context import ProcessContext, process_resident_memory_bytes
 from fedapfa.federated.acceptance import evaluate_federated_acceptance
 from fedapfa.federated.aggregation import (
     aggregation_tensor_policy,
@@ -325,10 +327,18 @@ def train_distributed_federated(
         for value in process_records
     ]
     scientific_identity = (
-        evaluation_scientific_identity(config) if "evaluation" in config else distributed_scientific_identity(config)
+        comparative_scientific_identity(config)
+        if "comparative_evaluation" in config
+        else evaluation_scientific_identity(config)
+        if "evaluation" in config
+        else distributed_scientific_identity(config)
     )
     configured_execution_identity = (
-        evaluation_execution_identity(config) if "evaluation" in config else distributed_execution_identity(config)
+        comparative_execution_identity(config)
+        if "comparative_evaluation" in config
+        else evaluation_execution_identity(config)
+        if "evaluation" in config
+        else distributed_execution_identity(config)
     )
     execution_identity = {
         "configuration_id": configuration_identity(config),
@@ -669,9 +679,7 @@ def train_distributed_federated(
                 selected_weight_inputs,
                 config["federated"]["aggregation_weighting"],
             )
-            normalized_weights_by_client = dict(
-                zip(selected, selected_weight_values, strict=True)
-            )
+            normalized_weights_by_client = dict(zip(selected, selected_weight_values, strict=True))
             if context.rank == context.node_leader_rank:
                 contribution, node_envelopes = build_node_contribution(
                     node_payloads,
@@ -755,6 +763,7 @@ def train_distributed_federated(
                 "inter_node_contribution_movement_time_seconds": (inter_node_contribution_time),
                 "global_reduction_time_seconds": global_reduction_time,
                 "aggregation_time_seconds": aggregation_time,
+                "host_resident_memory_bytes": process_resident_memory_bytes(),
             },
         )
         if context.is_coordinator:
@@ -916,6 +925,11 @@ def train_distributed_federated(
             update_norms = [record["update_l2_norm"] for record in round_client_records]
             update_cosines = [record["update_cosine_similarity"] for record in round_client_records]
             assignment_records = _assignment_records(assignments, process_records)
+            diagnostic_assignment_loads = (
+                measurement_session.assignment_loads(assignments, round_number)
+                if measurement_session is not None and hasattr(measurement_session, "assignment_loads")
+                else None
+            )
             client_by_id = {record["client_id"]: record for record in round_client_records}
             for assignment_record in assignment_records:
                 actual = client_by_id[assignment_record["client_id"]]
@@ -1101,6 +1115,22 @@ def train_distributed_federated(
                 "combined_process_busy_time_seconds_by_device_index": busy_by_device,
                 "clients_by_process_rank": clients_by_rank,
                 "examples_by_process_rank": examples_by_rank,
+                "batch_count_by_process_rank": (
+                    None
+                    if diagnostic_assignment_loads is None
+                    else diagnostic_assignment_loads["batch_count_by_process_rank"]
+                ),
+                "event_count_by_process_rank": (
+                    None
+                    if diagnostic_assignment_loads is None
+                    else diagnostic_assignment_loads["event_count_by_process_rank"]
+                ),
+                "diagnostic_assignment_loads_used_for_assignment": (
+                    None if diagnostic_assignment_loads is None else diagnostic_assignment_loads["used_for_assignment"]
+                ),
+                "host_resident_memory_bytes_by_process_rank": {
+                    rank: value["host_resident_memory_bytes"] for rank, value in phase_timings.items()
+                },
                 "clients_by_device_index": clients_by_device,
                 "examples_by_device_index": examples_by_device,
                 "estimated_idle_time_seconds_by_process_rank": idle_by_process,
@@ -1180,7 +1210,7 @@ def train_distributed_federated(
         raise RuntimeError("distributed execution ended before all communication rounds")
     if checkpoint_selection == "best_validation" and best_round is None:
         raise RuntimeError("best-validation selection completed without a validation result")
-    if config["execution_measurement"]["record_device_utilization"]:
+    if config["execution_measurement"]["record_device_utilization"] and "comparative_evaluation" not in config:
         utilization = _required_gpu_utilization_record(
             config,
             os.environ.get("FEDAPFA_GPU_TELEMETRY"),
@@ -1230,8 +1260,9 @@ def train_distributed_federated(
             },
         )
         test_dataset = bundle.official_test_dataset(model_selected=True)
+        official_test_category = "official_test" if "comparative_evaluation" in config else "validation"
         with (
-            measurement_session.measure("validation", {"official_test": True})
+            measurement_session.measure(official_test_category, {"official_test": True})
             if measurement_session is not None
             else nullcontext()
         ):
@@ -1272,9 +1303,7 @@ def train_distributed_federated(
         "coordinator process wall time for this independent treatment invocation; not Slurm allocation elapsed time"
     )
     measurements["derived_treatment_gpu_exposure_hours"] = (
-        measurements["internal_treatment_duration_seconds"]
-        * config["parallel_execution"]["device_count"]
-        / 3600.0
+        measurements["internal_treatment_duration_seconds"] * config["parallel_execution"]["device_count"] / 3600.0
     )
     measurements["derived_treatment_gpu_exposure_definition"] = (
         "internal treatment duration multiplied by configured GPU count; derived exposure, "
@@ -1361,9 +1390,7 @@ def train_distributed_federated(
         "internal_treatment_duration_seconds": measurements["internal_treatment_duration_seconds"],
         "internal_treatment_duration_definition": measurements["internal_treatment_duration_definition"],
         "derived_treatment_gpu_exposure_hours": measurements["derived_treatment_gpu_exposure_hours"],
-        "derived_treatment_gpu_exposure_definition": measurements[
-            "derived_treatment_gpu_exposure_definition"
-        ],
+        "derived_treatment_gpu_exposure_definition": measurements["derived_treatment_gpu_exposure_definition"],
         "mean_client_update_l2_norm": sum(record["update_l2_norm"] for record in client_records) / len(client_records),
         "mean_client_spike_rates": _mean_client_spike_rates(client_records),
         "mean_client_update_cosine_similarity": statistics.mean(

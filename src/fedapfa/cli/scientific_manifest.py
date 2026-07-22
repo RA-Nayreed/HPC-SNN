@@ -9,6 +9,8 @@ from pathlib import Path
 import yaml
 
 from fedapfa.configuration import (
+    load_comparative_allocations,
+    load_comparative_evaluation_manifest,
     load_device_capacity_manifest,
     load_distributed_evaluation_manifest,
     load_evaluation_allocations,
@@ -41,6 +43,8 @@ def _tasks(path: str):
         return load_resource_measurement_manifest(path)
     if collection in {"scheduling_evaluation", "hierarchical_reduction_evaluation"}:
         return load_evaluation_manifest(path)
+    if collection in {"system_scaling_energy_evaluation", "non_iid_energy_evaluation"}:
+        return load_comparative_evaluation_manifest(path)
     raise ValueError(f"unsupported scientific collection: {collection}")
 
 
@@ -66,7 +70,12 @@ def main() -> None:
     if context_action:
         values = load_heterogeneity_context_tasks(args.manifest)
     elif allocation_action:
-        values = load_evaluation_allocations(args.manifest)
+        collection = _collection(args.manifest)
+        values = (
+            load_comparative_allocations(args.manifest)
+            if collection in {"system_scaling_energy_evaluation", "non_iid_energy_evaluation"}
+            else load_evaluation_allocations(args.manifest)
+        )
     else:
         values = _tasks(args.manifest)
     if args.action == "validate":
@@ -90,7 +99,11 @@ def main() -> None:
         if context_action:
             print("\t".join((str(value.seed), value.experiment, value.source_record["run_directory"])))
         elif allocation_action:
-            fields = [value.dataset, str(value.seed)]
+            fields = (
+                [str(value.allocation_index), value.dataset, str(value.seed)]
+                if hasattr(value, "allocation_index")
+                else [value.dataset, str(value.seed)]
+            )
             for treatment, task in zip(value.execution_order, value.tasks, strict=True):
                 fields.extend((treatment, str(task.config_path)))
             print("\t".join(fields))
@@ -126,6 +139,18 @@ def main() -> None:
                             value.config["scheduler"]["strategy"],
                             value.config["aggregation_execution"]["topology"],
                             value.config["evaluation"]["comparison_reference"],
+                        )
+                    )
+                elif "comparative_evaluation" in value.config:
+                    fields.extend(
+                        str(item)
+                        for item in (
+                            parallel["node_count"],
+                            parallel["devices_per_node"],
+                            value.config["scheduler"]["strategy"],
+                            value.config["aggregation_execution"]["topology"],
+                            value.config["comparative_evaluation"]["treatment_id"],
+                            value.config["comparative_evaluation"]["comparison_reference"],
                         )
                     )
             print("\t".join(fields))

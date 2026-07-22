@@ -1,0 +1,9 @@
+include:
+  - ../../distributed_evaluation/shd/lif_fedavg_reference.yaml
+  - ../base.yaml
+name: shd_lif_system_scaling_one_node_four_gpu
+comparative_evaluation:
+  treatment_id: one_node_four_gpu
+  comparison_reference: shd_lif_system_scaling_one_node_one_gpu
+metadata:
+  experiment: shd_lif_system_scaling_one_node_four_gpu

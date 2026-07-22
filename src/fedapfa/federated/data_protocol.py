@@ -188,7 +188,7 @@ class FederatedSSCBundle:
     train_indices: np.ndarray
     validation_indices: np.ndarray
     validation_dataset: EventAudioDataset | None
-    partition: DirichletPartition
+    partition: DirichletPartition | StratifiedIIDPartition
     split_artifact: dict
     resolved_seed_values: dict[str, int]
     official_test_access_count: int = 0
@@ -270,17 +270,25 @@ def prepare_federated_ssc(config: dict, *, construct_validation: bool = True) ->
     split_artifact = dict(split_core)
     split_artifact["split_id"] = sha256_json(split_core)
     partition_config = config["federated"]["partition"]
-    partition = label_dirichlet_partition(
-        labels=labels,
-        eligible_indices=train_indices,
-        clients=config["federated"]["clients"],
-        alpha=partition_config["alpha"],
-        minimum_size=partition_config["minimum_examples_per_client"],
-        maximum_attempts=partition_config["maximum_attempts"],
-        seed=seeds["partition"],
-        validation_split_id=split_artifact["split_id"],
-        dataset_identity=train_identity,
-    )
+    common_partition = {
+        "labels": labels,
+        "eligible_indices": train_indices,
+        "clients": config["federated"]["clients"],
+        "minimum_size": partition_config["minimum_examples_per_client"],
+        "seed": seeds["partition"],
+        "validation_split_id": split_artifact["split_id"],
+        "dataset_identity": train_identity,
+    }
+    if partition_config["method"] == "label_dirichlet":
+        partition = label_dirichlet_partition(
+            **common_partition,
+            alpha=partition_config["alpha"],
+            maximum_attempts=partition_config["maximum_attempts"],
+        )
+    elif partition_config["method"] == "stratified_iid":
+        partition = stratified_iid_partition(**common_partition)
+    else:
+        raise ValueError("unsupported partition method: {}".format(partition_config["method"]))
     validation = (
         EventAudioDataset(
             validation_path,

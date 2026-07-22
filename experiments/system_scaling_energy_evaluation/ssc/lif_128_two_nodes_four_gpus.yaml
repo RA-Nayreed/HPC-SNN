@@ -1,0 +1,15 @@
+include:
+  - ../../distributed_evaluation/ssc/lif_128_fedavg_reference.yaml
+  - ../base.yaml
+name: ssc_lif_128_system_scaling_two_nodes_four_gpus
+parallel_execution:
+  node_count: 2
+  devices_per_node: 2
+calibration_requirements:
+  node_count: 2
+  sampler_topology: 2_node_4_device_node_local
+comparative_evaluation:
+  treatment_id: two_nodes_four_gpus
+  comparison_reference: ssc_lif_128_system_scaling_one_node_one_gpu
+metadata:
+  experiment: ssc_lif_128_system_scaling_two_nodes_four_gpus

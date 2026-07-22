@@ -23,6 +23,10 @@ INTERVAL_CATEGORIES = frozenset(
         "checkpoint_writing",
         "communication_round",
         "training_execution",
+        "official_test",
+        "complete_treatment",
+        "complete_allocation",
+        "between_treatments",
         "idle_before",
         "idle_after",
     }

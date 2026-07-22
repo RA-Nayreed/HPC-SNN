@@ -10,6 +10,8 @@ import sys
 import torch.distributed as dist
 
 from fedapfa.configuration import (
+    comparative_execution_identity,
+    comparative_scientific_identity,
     distributed_execution_identity,
     distributed_scientific_identity,
     evaluation_execution_identity,
@@ -94,12 +96,18 @@ def execute_distributed(config: dict, args: argparse.Namespace, module_name: str
             )
         dist.barrier()
         scientific_identity = (
-            evaluation_scientific_identity(config)
+            comparative_scientific_identity(config)
+            if "comparative_evaluation" in config
+            else evaluation_scientific_identity(config)
             if "evaluation" in config
             else distributed_scientific_identity(config)
         )
         configured_execution_identity = (
-            evaluation_execution_identity(config) if "evaluation" in config else distributed_execution_identity(config)
+            comparative_execution_identity(config)
+            if "comparative_evaluation" in config
+            else evaluation_execution_identity(config)
+            if "evaluation" in config
+            else distributed_execution_identity(config)
         )
         identity = {
             "configuration_id": configuration_identity(config),
@@ -127,7 +135,8 @@ def execute_distributed(config: dict, args: argparse.Namespace, module_name: str
                 torch.cuda.synchronize(context.device)
             session = session_factory(config, action.run_dir, bundle, model, context)
             session.start()
-            training_token = session.begin("training_execution")
+            treatment_category = "complete_treatment" if "comparative_evaluation" in config else "training_execution"
+            training_token = session.begin(treatment_category)
         result = train_distributed_federated(
             model,
             bundle,
@@ -143,20 +152,28 @@ def execute_distributed(config: dict, args: argparse.Namespace, module_name: str
             session.end(training_token)
             training_token = None
             completed_session = session
-            session = None
             measurement_acceptance = completed_session.stop(bool(result and result.get("completed")))
+            session = None
             if not measurement_acceptance["accepted"]:
                 raise SystemExit(2)
         if context.is_coordinator and not result["completed"]:
             raise SystemExit(2)
         return action.run_dir
-    finally:
+    except BaseException as error:
         if session is not None:
             try:
-                session.stop(bool(result and result.get("completed")))
-            except BaseException:
-                if result is not None:
-                    raise
+                abort = getattr(session, "abort", None)
+                if abort is None:
+                    session.stop(False)
+                else:
+                    abort(error)
+            except BaseException as cleanup_error:
+                error.add_note(f"measurement cleanup also failed: {type(cleanup_error).__name__}: {cleanup_error}")
+            session = None
+        raise
+    finally:
+        if session is not None:
+            session.stop(bool(result and result.get("completed")))
         close_process_context()
 
 

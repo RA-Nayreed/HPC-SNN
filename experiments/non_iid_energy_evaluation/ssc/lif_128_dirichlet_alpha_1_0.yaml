@@ -1,0 +1,13 @@
+include:
+  - ../../distributed_evaluation/ssc/lif_128_fedavg_reference.yaml
+  - ../base.yaml
+name: ssc_lif_128_non_iid_dirichlet_alpha_1_0
+federated:
+  partition:
+    method: label_dirichlet
+    alpha: 1.0
+comparative_evaluation:
+  treatment_id: dirichlet_alpha_1_0
+  comparison_reference: ssc_lif_128_non_iid_iid
+metadata:
+  experiment: ssc_lif_128_non_iid_dirichlet_alpha_1_0

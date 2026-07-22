@@ -277,3 +277,54 @@ No scientific result exists for these matrices until all declared Roihu executio
 ## Centralized CIFAR-10 learning verification
 
 `experiments/published_fedsnn/cifar10/centralized_learning_verification.yaml` uses the data representation and S-VGG9 model with a distinct `runs/fedsnn_centralized_verification` identity. It fits the 45,000-example training subset, selects by the 5,000-example validation subset, and evaluates the official test once. This configuration remains an independent model-learning check and is not part of the six-task federated manifest. The completed federated evidence above independently demonstrates that the implementation learns under the declared Table I protocol.
+
+## Week 7 scaling, non-IID, and measured-energy protocol
+
+This is a prospective protocol backed by a locally verified implementation. Scientific execution has not occurred, no Week 7 results exist, and no scaling, energy, accuracy, or adoption conclusion is claimed. Weeks 1–6 and their committed evidence remain unchanged; existing `results/` artifacts are not evidence for either collection below.
+
+### Fixed scientific workload
+
+Both collections cross SHD and SSC with seeds 37, 47, and 57. SHD uses the established 256/256 LIF model, 20 clients, ten selected clients, 100 rounds, one local epoch, Adam at 0.001, batch size 32, the deterministic stratified validation split, and checkpoint selection before one official-test evaluation. SSC uses the established 128/128 LIF model with the same federated counts and optimizer, batch size 256, its complete official train and validation collections, and one post-selection official-test evaluation. Both retain 700-to-140 channel reduction, 10 ms integration, isolated client models, fresh client optimizer state, deterministic initialization and round/client seed derivation, and example-count FedAvg.
+
+Rank zero alone selects clients, restores selected-client order, calls `flat_ordered`, validates, selects checkpoints, writes run-level records, and constructs and evaluates the official test. Client seeds cannot depend on rank, node, device, topology, process count, or arrival order. `example_count_longest_processing_time` is the only assignment policy; `event_structure_longest_processing_time`, `node_hierarchical`, CUDA MPS, MPI, and custom OpenMP are outside this protocol.
+
+### System-scaling collection
+
+`system_scaling_energy_evaluation` contains 24 executions: two datasets by three seeds by these four physical layouts.
+
+| Topology | Nodes | GPUs per node | Total GPUs | Processes |
+|---|---:|---:|---:|---:|
+| `one_node_one_gpu` | 1 | 1 | 1 | 1 |
+| `one_node_two_gpu` | 1 | 2 | 2 | 2 |
+| `one_node_four_gpu` | 1 | 4 | 4 | 4 |
+| `two_nodes_four_gpus` | 2 | 2 | 4 | 4 |
+
+Every row fixes label-Dirichlet alpha 0.5. Within dataset and seed, partition identity, initialization, selection sequence, client seeds, selected order, weights, and checkpoint rules are invariant. The one-GPU row is the numerical reference. Comparisons retain structural identity, exact and bounded parameter identity, prediction identity, checkpoint identity, and metric identity separately; similar accuracy alone never establishes equivalence.
+
+### Non-IID collection
+
+`non_iid_energy_evaluation` contains 24 executions: two datasets by three seeds by deterministic IID and label-Dirichlet alpha 1.0, 0.5, and 0.1. Every row uses one node, four GPUs, and four processes. The partition is the intended treatment difference; all eligible indices must be assigned exactly once, with population, presented-example, class-count, represented-class, entropy, partition-hash, seed, retry, and repair provenance retained. An invalid extreme partition fails with an explanation instead of dropping clients or examples.
+
+Four treatments share each dataset/seed allocation. Their rotated orders are IID/1.0/0.5/0.1 for seed 37; 1.0/0.1/IID/0.5 for seed 47; and 0.5/IID/0.1/1.0 for seed 57. Every treatment starts a fresh process and scientific state.
+
+### Resolved identity and resumption
+
+The `resolved_leaf_paths_v1` comparison runs after YAML composition and data/output overrides. Scaling permits only treatment/experiment, topology and mapping, rendezvous, execution/output, and allocation-description paths. Non-IID permits only treatment/experiment, distribution/alpha, partition identity/provenance, rotated order, and output identity. Named workload invariants provide a second check.
+
+Resume compatibility includes dataset, distribution, alpha, seed, partition, initialization, selection stream, scheduler, aggregation, topology, process/device mapping, backend, measurement, calibration, and Git identity. Hostname and Slurm allocation remain attempt provenance. An incomplete round is repeated; completed earlier rounds remain accepted. Telemetry never crosses attempt boundaries. Failure stops node samplers, flushes local attempt evidence, clears subgroups and the default process group, and preserves the originating exception.
+
+### Measured energy, calibration, and accounting
+
+One sampler process and telemetry file are owned per node. Canonical prefix-free physical GPU UUIDs provide exact one/two/four-device coverage; MIG, missing, malformed, duplicate, and unexpected UUIDs fail before workload construction. Samples retain monotonic and UTC time, raw/canonical UUID, node, power, utilization, memory, temperature, clocks, cumulative energy when available, backend, interval, sampling status, attempt, and Slurm allocation. Node files are schema-validated and atomically merged in deterministic node/device/time order.
+
+Gross and idle-adjusted energy use boundary-interpolated trapezoids independently on each physical device before summation. Negative power, duplicate or nonmonotonic times, errors, missing boundaries, and gaps above 250 ms are rejected. Same-device client intervals cannot overlap; different-device intervals may. Client training, distribution, collection, aggregation, validation, official test, checkpoint, other, idle-baseline, interrupted, unattributed, and complete-treatment energy remain separate. Integrated joules are never replaced by allocated GPU-hours.
+
+Each topology requires its own compatible instrumentation calibration covering every node, process, sampler, UUID, the 100 ms interval, and execution commit. Warm-ups are excluded; at least ten alternating measured/unmeasured pairs must have identical updates, median overhead at most 2%, at least 90% accepted interval coverage, no sampling errors, and zero official-test accesses.
+
+Allocation accounting stores display and raw job IDs, state, exit, elapsed seconds, TRES, timestamps, nodes, physical GPUs, and billed GPU-hours once. Internal treatment durations and derived GPU exposure are separate. Initialization, between-treatment, remaining overhead, and reconciliation error must close to allocation elapsed time within two seconds. Logical communication and movement are payload accounting, not measured physical network traffic.
+
+### Analysis and acceptance
+
+Scaling summaries pair every topology with one GPU by dataset and seed and report runtime, phase timing, accuracy, macro-F1, selected round, energy, utilization, memory, load, communication, inter-node movement, speedup, efficiency, energy ratio, derived energy-delay product, and numerical classifications. Non-IID summaries pair every treatment with IID by dataset and seed and report validation/test metrics, paired differences, time, population/event/load imbalance, energy, per-round and per-client energy, utilization, memory, and communication. Three-seed aggregates are arithmetic means with sample standard deviation; datasets are never pooled and no significance tests are performed.
+
+Complete, non-monotonic, or negative evidence remains valid when execution and evidence gates pass. The evidence-complete classifications are `system_scaling_energy_characterization_complete` and `non_iid_energy_characterization_complete`; neither encodes a favorable result.

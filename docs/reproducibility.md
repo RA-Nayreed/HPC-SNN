@@ -525,3 +525,63 @@ IID official-test accuracy was 81.50%, 82.16%, and 81.55%, with mean 81.7367% an
 The recorded execution commit is [`d71cfe4c4fdc7c3480806a5f1302c164273dfb82`](../results/fedsnn_paper_evaluation/provenance/execution-commit.txt). The manifest at that commit hashes to `e25d4d760cffe9475b09673888c6b0e21ba56d1dd8ddc436ffe84b3029db672c`, exactly matching the [stored manifest hash](../results/fedsnn_paper_evaluation/provenance/manifest-sha256.txt). The [Slurm accounting record](../results/fedsnn_paper_evaluation/provenance/slurm-accounting.txt) identifies tasks `236880_0` through `236880_5`; every task is `COMPLETED` with exit code `0:0`. The separate `slurm-array-id.txt` contains no identifier, so array identity is taken from the accounting record rather than inferred from that empty field.
 
 The evidence is the active Fed-SNN reference. The unsuccessful superseded 18.23–26.79% independent implementation remains unchanged and separate; it is neither pooled with nor averaged into these results. The three-seed results support protocol-aligned learning validation but not statistical significance, causality, novelty, energy efficiency, implementation equivalence, or an exact reproduction pass.
+
+## Week 7 prospective execution
+
+The implementation is locally verified, but neither Week 7 collection has been scientifically executed. No result or scaling, energy, accuracy, or adoption conclusion is available. Weeks 1–6 and all existing `results/` artifacts are unchanged and must not be interpreted as Week 7 evidence.
+
+On Roihu, define the project environment and submit topology-compatible calibration allocations before scientific work:
+
+~~~bash
+export WORK_DIR="/scratch/$CSC_PROJECT/$USER/hpc-snn"
+export FEDAPFA_VENV="/projappl/$CSC_PROJECT/$USER/hpc-snn-venv"
+bash scripts/slurm/submit_roihu_comparative_calibration.sh
+~~~
+
+The calibration wrapper submits one allocation for each scaling topology. The one-node/four-GPU artifact is also compatible with the non-IID collection. After every calibration has passed, submit the two independent matrices; omit `--max-parallel` to avoid an artificial array throttle, or provide a positive operational limit.
+
+~~~bash
+bash scripts/slurm/submit_roihu_system_scaling_energy.sh \
+  --work-dir "$WORK_DIR"
+bash scripts/slurm/submit_roihu_non_iid_energy.sh \
+  --work-dir "$WORK_DIR"
+~~~
+
+Collect accounting only after all submitted arrays and compatible resume allocations finish. Preserve `JobID` so display array-task identities remain distinct from raw job IDs, and include every allocation used by a resumed execution.
+
+~~~bash
+sacct -j <SCALING_JOB_IDS> -X --parsable2 \
+  --format=JobID,JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES,Start,End,NodeList \
+  > "$WORK_DIR/generated-evidence/system_scaling_energy_evaluation/slurm-accounting.txt"
+sacct -j <NON_IID_JOB_IDS> -X --parsable2 \
+  --format=JobID,JobIDRaw,State,ExitCode,ElapsedRaw,AllocTRES,Start,End,NodeList \
+  > "$WORK_DIR/generated-evidence/non_iid_energy_evaluation/slurm-accounting.txt"
+~~~
+
+Summary creation is explicit and rejects missing executions, incomplete measurement, incompatible identity, bad accounting, and reconciliation outside two seconds:
+
+~~~bash
+fedapfa-summarize-system-scaling-energy \
+  --manifest experiments/system_scaling_energy_evaluation/manifest.yaml \
+  --runs-root "$WORK_DIR/runs/system_scaling_energy_evaluation" \
+  --output-dir "$WORK_DIR/generated-evidence/system_scaling_energy_evaluation/summary" \
+  --slurm-accounting "$WORK_DIR/generated-evidence/system_scaling_energy_evaluation/slurm-accounting.txt"
+fedapfa-summarize-non-iid-energy \
+  --manifest experiments/non_iid_energy_evaluation/manifest.yaml \
+  --runs-root "$WORK_DIR/runs/non_iid_energy_evaluation" \
+  --output-dir "$WORK_DIR/generated-evidence/non_iid_energy_evaluation/summary" \
+  --slurm-accounting "$WORK_DIR/generated-evidence/non_iid_energy_evaluation/slurm-accounting.txt"
+~~~
+
+Figures are produced only through separate explicit commands after a valid summary exists:
+
+~~~bash
+fedapfa-create-system-scaling-figures \
+  --summary "$WORK_DIR/generated-evidence/system_scaling_energy_evaluation/summary/system_scaling_energy_evaluation_summary.json" \
+  --output-dir "$WORK_DIR/generated-evidence/system_scaling_energy_evaluation/figures"
+fedapfa-create-non-iid-figures \
+  --summary "$WORK_DIR/generated-evidence/non_iid_energy_evaluation/summary/non_iid_energy_evaluation_summary.json" \
+  --output-dir "$WORK_DIR/generated-evidence/non_iid_energy_evaluation/figures"
+~~~
+
+These commands generate scratch evidence only after scientific execution. They were not run during local implementation verification.
