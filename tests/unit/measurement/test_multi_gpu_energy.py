@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+import torch
 
 from fedapfa.measurement import comparative_runtime
 from fedapfa.measurement.comparative_runtime import ComparativeMeasurementSession
@@ -199,8 +201,8 @@ def test_interrupted_client_interval_is_not_an_accepted_overlap() -> None:
     validate_client_interval_nonoverlap([interrupted, accepted])
 
 
-def test_topology_calibration_compatibility_is_exact() -> None:
-    requirements = {
+def _calibration_requirements() -> dict:
+    return {
         "paired_repetitions": 10,
         "maximum_median_runtime_overhead_fraction": 0.02,
         "minimum_interval_coverage_fraction": 0.9,
@@ -210,7 +212,10 @@ def test_topology_calibration_compatibility_is_exact() -> None:
         "sampler_topology": "1_node_2_device_node_local",
         "sampling_interval_ms": 100,
     }
-    artifact = {
+
+
+def _calibration_artifact() -> dict:
+    return {
         "passed": True,
         "paired_repetitions": 10,
         "median_relative_overhead": 0.01,
@@ -226,20 +231,186 @@ def test_topology_calibration_compatibility_is_exact() -> None:
         "gpu_uuids": list(UUIDS[:2]),
         "execution_commit": "abc",
     }
-    assert validate_comparative_calibration(
+
+
+def test_cross_allocation_calibration_accepts_distinct_canonical_uuid_sets() -> None:
+    artifact = _calibration_artifact()
+    artifact["gpu_uuids"] = [f" GPU-{UUIDS[0].upper()} ", UUIDS[1].upper()]
+    result = validate_comparative_calibration(
         artifact,
-        requirements=requirements,
-        expected_gpu_uuids=UUIDS[:2],
+        requirements=_calibration_requirements(),
+        execution_gpu_uuids=[f" gpu-{UUIDS[2].upper()} ", UUIDS[3].upper()],
         execution_commit="abc",
-    )["compatible"]
-    incompatible = {**artifact, "device_count": 1}
-    with pytest.raises(ValueError, match="device_count"):
+    )
+    assert result["compatible"]
+    assert result["calibration_allocation_gpu_uuids"] == list(UUIDS[:2])
+    assert result["execution_allocation_gpu_uuids"] == list(UUIDS[2:])
+    assert result["checks"]["calibration_uuid_validity"]
+    assert result["checks"]["calibration_uuid_count"]
+    assert result["checks"]["execution_uuid_validity"]
+    assert result["checks"]["execution_uuid_count"]
+    assert "gpu_uuid_coverage" not in result["checks"]
+
+
+@pytest.mark.parametrize(
+    ("values", "failed_check"),
+    [
+        ([UUIDS[0], "malformed"], "calibration_uuid_validity"),
+        ([UUIDS[0], " "], "calibration_uuid_validity"),
+        ([UUIDS[0], f"MIG-{UUIDS[1]}"], "calibration_uuid_validity"),
+        ([UUIDS[0], f"GPU-{UUIDS[0].upper()}"], "calibration_uuid_validity"),
+        ([UUIDS[0]], "calibration_uuid_count"),
+        ([UUIDS[0], UUIDS[1], UUIDS[2]], "calibration_uuid_count"),
+    ],
+)
+def test_invalid_calibration_allocation_uuid_evidence_is_rejected(values, failed_check: str) -> None:
+    artifact = _calibration_artifact()
+    artifact["gpu_uuids"] = values
+    with pytest.raises(ValueError, match=failed_check):
         validate_comparative_calibration(
-            incompatible,
-            requirements=requirements,
-            expected_gpu_uuids=UUIDS[:2],
+            artifact,
+            requirements=_calibration_requirements(),
+            execution_gpu_uuids=UUIDS[2:],
             execution_commit="abc",
         )
+
+
+@pytest.mark.parametrize(
+    ("values", "failed_check"),
+    [
+        ([UUIDS[2], "malformed"], "execution_uuid_validity"),
+        ([UUIDS[2], ""], "execution_uuid_validity"),
+        ([UUIDS[2], f"MIG-{UUIDS[3]}"], "execution_uuid_validity"),
+        ([UUIDS[2], f"GPU-{UUIDS[2].upper()}"], "execution_uuid_validity"),
+        ([UUIDS[2]], "execution_uuid_count"),
+        ([UUIDS[1], UUIDS[2], UUIDS[3]], "execution_uuid_count"),
+    ],
+)
+def test_invalid_execution_allocation_uuid_evidence_is_rejected(values, failed_check: str) -> None:
+    with pytest.raises(ValueError, match=failed_check):
+        validate_comparative_calibration(
+            _calibration_artifact(),
+            requirements=_calibration_requirements(),
+            execution_gpu_uuids=values,
+            execution_commit="abc",
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "failed_check"),
+    [
+        ("passed", False, "passed"),
+        ("paired_repetitions", 9, "paired_repetitions"),
+        ("median_relative_overhead", 0.03, "median_overhead"),
+        ("sample_coverage_fraction", 0.89, "sample_coverage"),
+        ("sampling_errors", ["sample failed"], "sampling_errors"),
+        ("updates_numerically_identical", False, "updates_identical"),
+        ("official_test_access_count", 1, "official_test_isolation"),
+        ("node_count", 2, "node_count"),
+        ("device_count", 1, "device_count"),
+        ("process_count", 1, "process_count"),
+        ("sampler_topology", "incompatible", "sampler_topology"),
+        ("sampling_interval_ms", 200, "sampling_interval"),
+        ("execution_commit", "def", "execution_commit"),
+    ],
+)
+def test_non_uuid_calibration_compatibility_checks_remain_strict(field: str, value, failed_check: str) -> None:
+    artifact = _calibration_artifact()
+    artifact[field] = value
+    with pytest.raises(ValueError, match=failed_check):
+        validate_comparative_calibration(
+            artifact,
+            requirements=_calibration_requirements(),
+            execution_gpu_uuids=UUIDS[2:],
+            execution_commit="abc",
+        )
+
+
+class _StartableSampler:
+    process_is_alive = True
+
+    def __init__(self, *args, **kwargs) -> None:
+        self.started = False
+
+    def start(self) -> None:
+        self.started = True
+
+
+def test_comparative_session_records_both_allocation_uuid_sets(tmp_path: Path, monkeypatch) -> None:
+    artifact = _calibration_artifact()
+    artifact["gpu_uuids"] = [f"GPU-{UUIDS[0].upper()}", UUIDS[1]]
+    calibration_path = tmp_path / "calibration.json"
+    calibration_path.write_text(json.dumps(artifact), encoding="utf-8")
+    calibration_sha256 = hashlib.sha256(calibration_path.read_bytes()).hexdigest()
+    config = {
+        "energy_measurement": {"idle_before_seconds": 0.0},
+        "model": {"hidden_dims": [1, 1]},
+        "frozen_model_diagnostics": {
+            "runtime": {"model_path": "runtime.json", "model_sha256": "runtime", "feature_order": []},
+            "gross_energy": {"model_path": "gross.json", "model_sha256": "gross", "feature_order": []},
+        },
+        "calibration_requirements": _calibration_requirements(),
+        "instrumentation_calibration_identity": {"sha256": calibration_sha256},
+    }
+    execution_values = [f"GPU-{UUIDS[2].upper()}", f"GPU-{UUIDS[3].upper()}"]
+    context = SimpleNamespace(
+        device=torch.device("cuda:0"),
+        control_device=torch.device("cuda:0"),
+        client_processes_per_device=1,
+        gpu_uuid=execution_values[0],
+        gpu_uuid_raw=execution_values[0],
+        world_size=2,
+        rank=0,
+        node_rank=0,
+        local_rank=0,
+        node_count=1,
+        physical_device_count=2,
+        host="execution-node",
+        is_coordinator=True,
+    )
+
+    def all_gather(values, value):
+        if isinstance(value, dict) and "gpu_uuid" in value:
+            values[:] = [
+                value,
+                {
+                    "rank": 1,
+                    "node_rank": 0,
+                    "host": "execution-node",
+                    "gpu_uuid": UUIDS[3],
+                    "gpu_uuid_raw": execution_values[1],
+                },
+            ]
+        else:
+            values[:] = [None, None]
+
+    def frozen_model(path, expected_sha256, feature_order):
+        target = "gross_energy_joules" if "gross" in str(path) else "client_wall_time_seconds"
+        return {"target": target}
+
+    monkeypatch.setenv("SLURM_JOB_ID", "200")
+    monkeypatch.delenv("SLURM_ARRAY_JOB_ID", raising=False)
+    monkeypatch.delenv("SLURM_ARRAY_TASK_ID", raising=False)
+    monkeypatch.setattr(comparative_runtime.dist, "all_gather_object", all_gather)
+    monkeypatch.setattr(comparative_runtime.dist, "broadcast_object_list", lambda values, src, device: None)
+    monkeypatch.setattr(comparative_runtime.dist, "barrier", lambda: None)
+    monkeypatch.setattr(comparative_runtime, "git_metadata", lambda: {"commit": "abc"})
+    monkeypatch.setattr(comparative_runtime, "_load_frozen_model", frozen_model)
+    monkeypatch.setattr(comparative_runtime, "NodeNvmlProcessSampler", _StartableSampler)
+    model = SimpleNamespace(state_dict=lambda: {"weight": torch.tensor([1.0])})
+
+    session = ComparativeMeasurementSession(
+        config, tmp_path / "run", SimpleNamespace(), model, context, calibration_path
+    )
+    session.start()
+
+    provenance = json.loads(
+        (session.attempt_dir / "calibration_reference.json").read_text(encoding="utf-8")
+    )
+    assert provenance["calibration_allocation_gpu_uuids"] == list(UUIDS[:2])
+    assert provenance["execution_allocation_gpu_uuids"] == list(UUIDS[2:])
+    assert provenance["compatibility_checks"]["calibration_uuid_validity"]
+    assert provenance["compatibility_checks"]["execution_uuid_validity"]
 
 
 class _FailingSampler:

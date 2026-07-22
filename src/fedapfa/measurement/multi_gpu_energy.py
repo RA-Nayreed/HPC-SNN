@@ -323,23 +323,38 @@ def integrate_physical_devices(
     }
 
 
+def _allocation_gpu_uuid_checks(values, expected_count: int) -> tuple[bool, bool, tuple[str, ...]]:
+    if not isinstance(values, Sequence) or isinstance(values, (str, bytes)):
+        return False, False, ()
+    count_valid = len(values) == expected_count
+    canonical = []
+    validity = True
+    for value in values:
+        try:
+            canonical.append(canonical_gpu_uuid(value))
+        except ValueError:
+            validity = False
+    if len(canonical) != len(set(canonical)):
+        validity = False
+    return validity, count_valid, tuple(sorted(set(canonical)))
+
+
 def validate_comparative_calibration(
     artifact: Mapping,
     *,
     requirements: Mapping,
-    expected_gpu_uuids: Sequence[str],
+    execution_gpu_uuids: Sequence[str],
     execution_commit: str,
 ) -> dict:
-    """Require a passed calibration that exactly matches topology, sampler, devices, and commit."""
+    """Validate allocation-local UUID evidence and cross-allocation measurement compatibility."""
 
-    findings = []
-    expected = {canonical_gpu_uuid(value) for value in expected_gpu_uuids}
-    observed_raw = artifact.get("gpu_uuids", [])
-    try:
-        observed = {canonical_gpu_uuid(value) for value in observed_raw}
-    except ValueError:
-        observed = set()
-        findings.append("calibration_gpu_uuid_malformed")
+    required_device_count = int(requirements["device_count"])
+    calibration_uuid_validity, calibration_uuid_count, calibration_uuids = _allocation_gpu_uuid_checks(
+        artifact.get("gpu_uuids"), required_device_count
+    )
+    execution_uuid_validity, execution_uuid_count, execution_uuids = _allocation_gpu_uuid_checks(
+        execution_gpu_uuids, required_device_count
+    )
     checks = {
         "passed": artifact.get("passed") is True,
         "paired_repetitions": int(artifact.get("paired_repetitions", 0)) >= int(requirements["paired_repetitions"]),
@@ -355,13 +370,21 @@ def validate_comparative_calibration(
         "process_count": artifact.get("process_count") == requirements["process_count"],
         "sampler_topology": artifact.get("sampler_topology") == requirements["sampler_topology"],
         "sampling_interval": artifact.get("sampling_interval_ms") == requirements["sampling_interval_ms"],
-        "gpu_uuid_coverage": observed == expected and len(observed) == len(expected_gpu_uuids),
+        "calibration_uuid_validity": calibration_uuid_validity,
+        "calibration_uuid_count": calibration_uuid_count,
+        "execution_uuid_validity": execution_uuid_validity,
+        "execution_uuid_count": execution_uuid_count,
         "execution_commit": artifact.get("execution_commit") == execution_commit,
     }
-    findings.extend(name for name, passed in checks.items() if not passed)
+    findings = [name for name, passed in checks.items() if not passed]
     if findings:
         raise ValueError(f"instrumentation calibration is incompatible: {sorted(set(findings))}")
-    return {"compatible": True, "checks": checks, "gpu_uuids": sorted(observed)}
+    return {
+        "compatible": True,
+        "checks": checks,
+        "calibration_allocation_gpu_uuids": list(calibration_uuids),
+        "execution_allocation_gpu_uuids": list(execution_uuids),
+    }
 
 
 def _nvml_optional(binding, handle, function_name: str, *args):

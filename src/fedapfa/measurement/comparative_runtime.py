@@ -234,16 +234,23 @@ class ComparativeMeasurementSession:
         configured_calibration = config.get("instrumentation_calibration_identity")
         if not isinstance(configured_calibration, dict) or configured_calibration.get("sha256") != calibration_sha256:
             raise RuntimeError("instrumentation calibration identity differs from the resolved execution")
-        validate_comparative_calibration(
+        calibration_validation = validate_comparative_calibration(
             artifact,
             requirements=config["calibration_requirements"],
-            expected_gpu_uuids=[value["gpu_uuid"] for value in self.process_mappings],
+            execution_gpu_uuids=[value["gpu_uuid"] for value in self.process_mappings],
             execution_commit=str(self.git_commit),
         )
         self.calibration_reference = {
             "path": str(calibration_source),
             "sha256": calibration_sha256,
             "artifact": artifact,
+            "calibration_allocation_gpu_uuids": calibration_validation[
+                "calibration_allocation_gpu_uuids"
+            ],
+            "execution_allocation_gpu_uuids": calibration_validation[
+                "execution_allocation_gpu_uuids"
+            ],
+            "compatibility_checks": calibration_validation["checks"],
         }
         self.node_sampler = None
         if context.local_rank == 0:
