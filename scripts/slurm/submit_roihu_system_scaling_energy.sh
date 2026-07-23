@@ -47,7 +47,7 @@ if [[ -n "${max_parallel}" ]]; then
     array+="%${max_parallel}"
 fi
 topologies=(one_node_one_gpu one_node_two_gpu one_node_four_gpu two_nodes_four_gpus)
-indices=("0,1,2,12,13,14" "3,4,5,15,16,17" "6,7,8,18,19,20" "9,10,11,21,22,23")
+indices=("0:1:2:12:13:14" "3:4:5:15:16:17" "6:7:8:18:19:20" "9:10:11:21:22:23")
 nodes=(1 1 1 2)
 gpus_per_node=(1 2 4 2)
 cpus=(72 144 288 144)

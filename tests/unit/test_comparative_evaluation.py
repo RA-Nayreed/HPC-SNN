@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import copy
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -22,6 +24,207 @@ from fedapfa.configuration import (
 ROOT = Path(__file__).resolve().parents[2]
 SCALING = ROOT / "experiments/system_scaling_energy_evaluation/manifest.yaml"
 NON_IID = ROOT / "experiments/non_iid_energy_evaluation/manifest.yaml"
+SCALING_SUBMIT = ROOT / "scripts/slurm/submit_roihu_system_scaling_energy.sh"
+SCALING_BATCH = ROOT / "scripts/slurm/system_scaling_energy.sbatch"
+SCALING_ALLOCATION_INDICES = {
+    "one_node_one_gpu": [0, 1, 2, 12, 13, 14],
+    "one_node_two_gpu": [3, 4, 5, 15, 16, 17],
+    "one_node_four_gpu": [6, 7, 8, 18, 19, 20],
+    "two_nodes_four_gpus": [9, 10, 11, 21, 22, 23],
+}
+SCALING_RESOURCES = {
+    "one_node_one_gpu": (1, 1, 1, 72, "217086M"),
+    "one_node_two_gpu": (1, 1, 2, 144, "434172M"),
+    "one_node_four_gpu": (1, 1, 4, 288, "868344M"),
+    "two_nodes_four_gpus": (2, 2, 2, 144, "434172M"),
+}
+
+
+def _write_command(path: Path, text: str) -> None:
+    path.write_text(text, encoding="utf-8")
+    path.chmod(0o755)
+
+
+def _run_scaling_submission(tmp_path: Path, max_parallel: int | None = None) -> list[list[str]]:
+    command_dir = tmp_path / "commands"
+    command_dir.mkdir()
+    _write_command(command_dir / "module", "#!/usr/bin/env bash\nexit 0\n")
+    _write_command(command_dir / "mkdir", "#!/usr/bin/env bash\nexit 0\n")
+    record_path = tmp_path / "sbatch-arguments"
+    _write_command(
+        command_dir / "sbatch",
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+for argument in "$@"; do
+    printf '%s\0' "${argument}" >> "${SBATCH_ARGUMENT_RECORD}"
+done
+printf '\n' >> "${SBATCH_ARGUMENT_RECORD}"
+printf '319835\n'
+""",
+    )
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    _write_command(
+        venv / "bin" / "python3",
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+    *"scientific_manifest allocation-count"*) printf '24\n' ;;
+    *"scientific_manifest count"*) printf '24\n' ;;
+    *"scientific_manifest validate"*) printf '{}\n' ;;
+    -c*) exit 0 ;;
+    *) exit 2 ;;
+esac
+""",
+    )
+    environment = {
+        **os.environ,
+        "PATH": f"{command_dir}:{os.environ['PATH']}",
+        "CSC_PROJECT": "project_2001234",
+        "USER": "scientist",
+        "FEDAPFA_VENV": str(venv),
+        "SBATCH_ARGUMENT_RECORD": str(record_path),
+    }
+    command = [
+        "bash",
+        str(SCALING_SUBMIT),
+        "--work-dir",
+        "/scratch/project_2001234/scientist/week7",
+    ]
+    if max_parallel is not None:
+        command.extend(("--max-parallel", str(max_parallel)))
+    subprocess.run(
+        command,
+        cwd=ROOT,
+        env=environment,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return [
+        [argument.decode() for argument in line.split(b"\0") if argument]
+        for line in record_path.read_bytes().splitlines()
+        if line
+    ]
+
+
+def _scaling_exports(invocations: list[list[str]]) -> dict[str, str]:
+    exports = {}
+    for invocation in invocations:
+        export_arguments = [argument for argument in invocation if argument.startswith("--export=")]
+        assert len(export_arguments) == 1
+        specifications = export_arguments[0].removeprefix("--export=").split(",")
+        topology_assignments = [value for value in specifications if value.startswith("SCALING_TOPOLOGY=")]
+        index_assignments = [value for value in specifications if value.startswith("SCALING_ALLOCATION_INDICES=")]
+        assert len(topology_assignments) == len(index_assignments) == 1
+        topology = topology_assignments[0].partition("=")[2]
+        exports[topology] = index_assignments[0].partition("=")[2]
+    return exports
+
+
+def _run_scaling_map_validation(transport: str, task_id: str) -> subprocess.CompletedProcess[str]:
+    text = SCALING_BATCH.read_text(encoding="utf-8")
+    start = text.index('[[ "${SCALING_ALLOCATION_INDICES}" =~')
+    end = text.index('allocation="$("${python_bin}"', start)
+    script = "set -euo pipefail\n" + text[start:end] + 'printf "%s\\n" "${manifest_index}"\n'
+    return subprocess.run(
+        ["bash", "-c", script],
+        env={
+            **os.environ,
+            "SCALING_ALLOCATION_INDICES": transport,
+            "SLURM_ARRAY_TASK_ID": task_id,
+        },
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+
+@pytest.fixture
+def scaling_submissions(tmp_path: Path) -> list[list[str]]:
+    return _run_scaling_submission(tmp_path)
+
+
+def test_scaling_submission_exports_exact_slurm_safe_maps_and_resources(
+    scaling_submissions: list[list[str]],
+) -> None:
+    assert len(scaling_submissions) == 4
+    exports = _scaling_exports(scaling_submissions)
+    assert set(exports) == set(SCALING_ALLOCATION_INDICES)
+    recovered = {}
+    for topology, transport in exports.items():
+        assert "," not in transport
+        values = transport.split(":")
+        assert len(values) == 6
+        assert all(value.isdecimal() for value in values)
+        parsed = [int(value) for value in values]
+        assert len(parsed) == len(set(parsed)) == 6
+        recovered[topology] = parsed
+    assert recovered == SCALING_ALLOCATION_INDICES
+    flattened = [index for values in recovered.values() for index in values]
+    assert sorted(flattened) == list(range(24))
+    assert len(flattened) == len(set(flattened))
+    for invocation in scaling_submissions:
+        export_argument = next(argument for argument in invocation if argument.startswith("--export="))
+        specifications = export_argument.removeprefix("--export=").split(",")
+        topology = next(value.partition("=")[2] for value in specifications if value.startswith("SCALING_TOPOLOGY="))
+        nodes, tasks, gpus_per_node, cpus, memory = SCALING_RESOURCES[topology]
+        expected_arguments = {
+            "--array=0-5",
+            f"--nodes={nodes}",
+            f"--ntasks={tasks}",
+            "--ntasks-per-node=1",
+            f"--gres=gpu:gh200:{gpus_per_node}",
+            f"--cpus-per-task={cpus}",
+            f"--mem={memory}",
+        }
+        assert expected_arguments <= set(invocation)
+
+
+def test_scaling_submission_supports_optional_positive_throttle(tmp_path: Path) -> None:
+    invocations = _run_scaling_submission(tmp_path, max_parallel=3)
+    assert len(invocations) == 4
+    assert all("--array=0-5%3" in invocation for invocation in invocations)
+
+
+def test_scaling_array_tasks_resolve_exact_manifest_allocations(
+    scaling_submissions: list[list[str]],
+) -> None:
+    exports = _scaling_exports(scaling_submissions)
+    allocations = {allocation.allocation_index: allocation for allocation in load_comparative_allocations(SCALING)}
+    expected_seeds = (37, 47, 57)
+    for topology, transport in exports.items():
+        for task_id, expected_index in enumerate(SCALING_ALLOCATION_INDICES[topology]):
+            result = _run_scaling_map_validation(transport, str(task_id))
+            assert result.returncode == 0, result.stderr
+            assert int(result.stdout) == expected_index
+            allocation = allocations[expected_index]
+            expected_dataset = "shd" if task_id < 3 else "ssc"
+            expected_seed = expected_seeds[task_id % 3]
+            assert allocation.dataset == expected_dataset
+            assert allocation.seed == expected_seed
+            assert list(allocation.execution_order) == [topology]
+            assert allocation.tasks[0].config["comparative_evaluation"]["treatment_id"] == topology
+
+
+@pytest.mark.parametrize(
+    ("transport", "task_id"),
+    [
+        ("0,1,2,12,13,14", "0"),
+        ("0:1:2:12:13", "0"),
+        ("0:1:2:12:13:14:15", "0"),
+        ("0:1::2:12:13:14", "0"),
+        ("0:1:two:12:13:14", "0"),
+        ("0:1:2:12:13:13", "0"),
+        ("0:1:2:12:13:-1", "0"),
+        ("0:1:2:12:13:14", "6"),
+        ("0:1:2:12:13:14", "-1"),
+    ],
+)
+def test_scaling_batch_rejects_malformed_index_transport(transport: str, task_id: str) -> None:
+    result = _run_scaling_map_validation(transport, task_id)
+    assert result.returncode == 2
+    assert "scaling allocation-index map is incompatible" in result.stderr
 
 
 def test_comparative_manifests_have_exact_disjoint_matrices() -> None:

@@ -23,11 +23,24 @@ cd "${REPO_ROOT}"
 "${python_bin}" -c 'import fedapfa, torch; assert torch.cuda.is_available(); assert torch.version.cuda; assert torch.distributed.is_nccl_available()'
 "${python_bin}" -m fedapfa.cli.scientific_manifest validate --manifest "${EVALUATION_MANIFEST}"
 
-IFS=, read -r -a allocation_indices <<< "${SCALING_ALLOCATION_INDICES}"
-[[ "${#allocation_indices[@]}" == 6 && "${SLURM_ARRAY_TASK_ID}" -ge 0 && "${SLURM_ARRAY_TASK_ID}" -lt 6 ]] || {
+[[ "${SCALING_ALLOCATION_INDICES}" =~ ^[0-9]+(:[0-9]+){5}$ && "${SLURM_ARRAY_TASK_ID}" =~ ^[0-5]$ ]] || {
     echo "scaling allocation-index map is incompatible" >&2
     exit 2
 }
+IFS=: read -r -a allocation_indices <<< "${SCALING_ALLOCATION_INDICES}"
+[[ "${#allocation_indices[@]}" == 6 ]] || {
+    echo "scaling allocation-index map is incompatible" >&2
+    exit 2
+}
+declare -A observed_allocation_indices=()
+for index in "${allocation_indices[@]}"; do
+    canonical_index="$((10#${index}))"
+    [[ -z "${observed_allocation_indices[${canonical_index}]+x}" ]] || {
+        echo "scaling allocation-index map is incompatible" >&2
+        exit 2
+    }
+    observed_allocation_indices["${canonical_index}"]=1
+done
 manifest_index="${allocation_indices[SLURM_ARRAY_TASK_ID]}"
 allocation="$("${python_bin}" -m fedapfa.cli.scientific_manifest allocation-task \
     --manifest "${EVALUATION_MANIFEST}" --index "${manifest_index}")"
