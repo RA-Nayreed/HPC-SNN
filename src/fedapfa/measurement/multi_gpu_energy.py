@@ -597,21 +597,31 @@ class NodeNvmlProcessSampler:
             raise RuntimeError("node sampler was not started")
         self._stop.set()
         self._process.join(timeout=self.timeout_seconds)
-        if self._process.is_alive():
+        clean_shutdown = not self._process.is_alive()
+        if not clean_shutdown:
             self._terminate()
-            raise RuntimeError("node sampler did not terminate cleanly")
+        still_alive = self._process.is_alive()
         statuses = []
         try:
             while self._receiver.poll():
                 statuses.append(self._receiver.recv())
+        except EOFError:
+            pass
         finally:
-            self._receiver.close()
+            receiver = self._receiver
             self._receiver = None
+            receiver.close()
         failed = next((value for value in statuses if value.get("kind") == "failed"), None)
         stopped = next((value for value in statuses if value.get("kind") == "stopped"), None)
         if failed is not None:
             raise RuntimeError(f"node sampler failed: {failed.get('error_type')}: {failed.get('error_message')}")
-        if stopped is None or self._process.exitcode != 0:
+        if still_alive:
+            raise RuntimeError("node sampler process could not be terminated")
+        if not clean_shutdown:
+            raise RuntimeError("node sampler did not terminate cleanly")
+        if self._process.exitcode != 0:
+            raise RuntimeError(f"node sampler exited during runtime with code {self._process.exitcode}")
+        if stopped is None:
             raise RuntimeError("node sampler lacks an orderly shutdown record")
         self.sample_count = int(stopped["sample_count"])
         self.error_count = int(stopped["error_count"])

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import multiprocessing
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -12,6 +13,7 @@ import torch
 from fedapfa.measurement import comparative_runtime
 from fedapfa.measurement.comparative_runtime import ComparativeMeasurementSession
 from fedapfa.measurement.multi_gpu_energy import (
+    NodeNvmlProcessSampler,
     NodeTelemetrySample,
     integrate_physical_devices,
     merge_node_telemetry,
@@ -57,6 +59,138 @@ def _write(path: Path, rows) -> None:
         "".join(json.dumps(value.record(), sort_keys=True) + "\n" for value in rows),
         encoding="utf-8",
     )
+
+
+class _NodeSamplerStopEvent:
+    def __init__(self) -> None:
+        self.set_count = 0
+
+    def set(self) -> None:
+        self.set_count += 1
+
+
+class _NodeSamplerProcess:
+    def __init__(self, *, exitcode: int, alive: bool = False) -> None:
+        self.exitcode = exitcode
+        self._alive = alive
+        self.join_count = 0
+        self.terminate_count = 0
+        self.kill_count = 0
+
+    def join(self, timeout: float) -> None:
+        assert timeout > 0
+        self.join_count += 1
+
+    def is_alive(self) -> bool:
+        return self._alive
+
+    def terminate(self) -> None:
+        self.terminate_count += 1
+        self._alive = False
+        self.exitcode = -15
+
+    def kill(self) -> None:
+        self.kill_count += 1
+        self._alive = False
+        self.exitcode = -9
+
+
+def _node_sampler_for_stop(tmp_path: Path, *, exitcode: int = 0, alive: bool = False):
+    sampler = NodeNvmlProcessSampler(
+        UUIDS[:1],
+        tmp_path / "node.jsonl",
+        node_identity="node-a",
+        execution_attempt=1,
+        slurm_allocation_identity="100_0:101",
+        timeout_seconds=0.1,
+    )
+    context = multiprocessing.get_context("spawn")
+    receiver, sender = context.Pipe(duplex=False)
+    process = _NodeSamplerProcess(exitcode=exitcode, alive=alive)
+    stop_event = _NodeSamplerStopEvent()
+    sampler._receiver = receiver
+    sampler._process = process
+    sampler._stop = stop_event
+    return sampler, receiver, sender, process, stop_event
+
+
+def test_node_sampler_stop_accepts_stopped_status_followed_by_pipe_eof(tmp_path: Path) -> None:
+    sampler, receiver, sender, process, stop_event = _node_sampler_for_stop(tmp_path)
+    sender.send({"kind": "stopped", "sample_count": 23, "error_count": 2})
+    sender.close()
+    assert receiver.poll(1.0)
+
+    sampler.stop()
+
+    assert sampler.sample_count == 23
+    assert sampler.error_count == 2
+    assert not process.is_alive()
+    assert stop_event.set_count == 1
+    assert receiver.closed
+    assert sampler._receiver is None
+
+
+def test_node_sampler_stop_rejects_pipe_eof_without_stopped_status(tmp_path: Path) -> None:
+    sampler, receiver, sender, process, _ = _node_sampler_for_stop(tmp_path)
+    sender.close()
+    assert receiver.poll(1.0)
+
+    with pytest.raises(RuntimeError, match="lacks an orderly shutdown record"):
+        sampler.stop()
+
+    assert not process.is_alive()
+    assert receiver.closed
+    assert sampler._receiver is None
+
+
+def test_node_sampler_stop_preserves_failed_status_before_pipe_eof(tmp_path: Path) -> None:
+    sampler, receiver, sender, process, _ = _node_sampler_for_stop(tmp_path)
+    sender.send(
+        {
+            "kind": "failed",
+            "error_type": "SensorFailure",
+            "error_message": "telemetry write failed",
+        }
+    )
+    sender.close()
+    assert receiver.poll(1.0)
+
+    with pytest.raises(RuntimeError, match="node sampler failed: SensorFailure: telemetry write failed"):
+        sampler.stop()
+
+    assert not process.is_alive()
+    assert receiver.closed
+    assert sampler._receiver is None
+
+
+def test_node_sampler_stop_rejects_nonzero_exit_after_stopped_status_and_eof(tmp_path: Path) -> None:
+    sampler, receiver, sender, process, _ = _node_sampler_for_stop(tmp_path, exitcode=7)
+    sender.send({"kind": "stopped", "sample_count": 5, "error_count": 0})
+    sender.close()
+    assert receiver.poll(1.0)
+
+    with pytest.raises(RuntimeError, match="exited during runtime with code 7"):
+        sampler.stop()
+
+    assert not process.is_alive()
+    assert receiver.closed
+    assert sampler._receiver is None
+
+
+def test_node_sampler_stop_terminates_unclean_child_and_rejects_shutdown(tmp_path: Path) -> None:
+    sampler, receiver, sender, process, stop_event = _node_sampler_for_stop(tmp_path, alive=True)
+    sender.close()
+    assert receiver.poll(1.0)
+
+    with pytest.raises(RuntimeError, match="did not terminate cleanly"):
+        sampler.stop()
+
+    assert not process.is_alive()
+    assert process.terminate_count == 1
+    assert process.kill_count == 0
+    assert stop_event.set_count == 2
+    assert receiver.closed
+    assert sampler._receiver is None
 
 
 @pytest.mark.parametrize("count", [1, 2, 4])
