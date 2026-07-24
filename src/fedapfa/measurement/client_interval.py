@@ -64,8 +64,18 @@ class IntervalRecord:
     data_wait_seconds: float | None = None
     cuda_event_seconds: float | None = None
     residual_host_seconds: float | None = None
+    source_rank: int | None = None
+    schema_version: int | None = None
 
     def __post_init__(self) -> None:
+        qualified = self.source_rank is not None or self.schema_version is not None
+        if qualified and (
+            isinstance(self.source_rank, bool)
+            or not isinstance(self.source_rank, int)
+            or self.source_rank < 0
+            or self.schema_version != 2
+        ):
+            raise ValueError("qualified interval provenance requires schema version 2 and a non-negative source rank")
         if self.category not in INTERVAL_CATEGORIES:
             raise ValueError(f"unsupported interval category: {self.category}")
         if self.end_ns < self.start_ns or self.wall_seconds < 0:
@@ -81,16 +91,37 @@ class IntervalRecord:
                 raise ValueError("client timing components do not reconcile with wall duration")
 
     def record(self) -> dict:
-        return asdict(self)
+        value = asdict(self)
+        if self.source_rank is None:
+            value.pop("source_rank")
+            value.pop("schema_version")
+        return value
 
 
 class IntervalRecorder:
     """Append intervals promptly and reject duplicate accepted client identities."""
 
-    def __init__(self, path: str | Path, clock: MonotonicClock | None = None) -> None:
+    def __init__(
+        self,
+        path: str | Path,
+        clock: MonotonicClock | None = None,
+        *,
+        source_rank: int | None = None,
+        schema_version: int | None = None,
+    ) -> None:
+        qualified = source_rank is not None or schema_version is not None
+        if qualified and (
+            isinstance(source_rank, bool)
+            or not isinstance(source_rank, int)
+            or source_rank < 0
+            or schema_version != 2
+        ):
+            raise ValueError("qualified interval recorder requires schema version 2 and a non-negative source rank")
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.clock = clock or SystemMonotonicClock()
+        self.source_rank = source_rank
+        self.schema_version = schema_version
         self._lock = threading.Lock()
         self._sequence = 0
         self._accepted_client_keys: set[tuple] = set()
@@ -100,6 +131,13 @@ class IntervalRecorder:
                 if not line.strip():
                     continue
                 value = json.loads(line)
+                if qualified and (
+                    value.get("source_rank") != self.source_rank
+                    or value.get("schema_version") != self.schema_version
+                ):
+                    raise ValueError("existing interval source rank differs from its recorder")
+                if not qualified and ("source_rank" in value or "schema_version" in value):
+                    raise ValueError("existing qualified interval requires a qualified recorder")
                 self._sequence += 1
                 if value.get("category") == "client_training" and value.get("accepted"):
                     identity = ClientIntervalIdentity(**value["identity"])
@@ -140,7 +178,12 @@ class IntervalRecorder:
             if accepted and prior_end is not None and start_ns < prior_end:
                 raise ValueError("accepted client intervals overlap")
             self._sequence += 1
-            interval_id = f"attempt-{identity.execution_attempt}-client-{self._sequence}"
+            if self.source_rank is None:
+                interval_id = f"attempt-{identity.execution_attempt}-client-{self._sequence}"
+            else:
+                interval_id = (
+                    f"attempt-{identity.execution_attempt}-rank-{self.source_rank}-client-{self._sequence}"
+                )
             if accepted:
                 self._accepted_client_keys.add(key)
                 self._last_client_end_ns[identity.execution_attempt] = end_ns
@@ -158,6 +201,8 @@ class IntervalRecorder:
             data_wait_seconds,
             cuda_event_seconds,
             residual,
+            self.source_rank,
+            self.schema_version,
         )
         self._append(record)
         return record
@@ -179,7 +224,10 @@ class IntervalRecorder:
             end_ns = self.clock.now_ns()
             with self._lock:
                 self._sequence += 1
-                interval_id = f"attempt-{execution_attempt}-interval-{self._sequence}"
+                if self.source_rank is None:
+                    interval_id = f"attempt-{execution_attempt}-interval-{self._sequence}"
+                else:
+                    interval_id = f"attempt-{execution_attempt}-rank-{self.source_rank}-interval-{self._sequence}"
             self._append(
                 IntervalRecord(
                     interval_id,
@@ -192,5 +240,7 @@ class IntervalRecorder:
                     accepted,
                     reason,
                     identity,
+                    source_rank=self.source_rank,
+                    schema_version=self.schema_version,
                 )
             )

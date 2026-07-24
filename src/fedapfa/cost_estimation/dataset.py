@@ -166,10 +166,12 @@ def validate_accepted_run(run_dir: Path, strict_collection: bool = True) -> tupl
             if key in scientific_by_key:
                 raise ValueError(f"run {run_dir} duplicates an established client identity")
             scientific_by_key[key] = value
-        resource_by_key = {
-            (int(value["communication_round"]), int(value["selected_position"])): value
-            for value in records
-        }
+        resource_by_key = {}
+        for value in records:
+            key = (int(value["communication_round"]), int(value["selected_position"]))
+            if key in resource_by_key:
+                raise ValueError(f"run {run_dir} duplicates a client-resource identity")
+            resource_by_key[key] = value
         if set(scientific_by_key) != set(resource_by_key):
             raise ValueError(f"run {run_dir} is missing a selected client-resource mapping")
         for key, scientific in scientific_by_key.items():
@@ -181,7 +183,12 @@ def validate_accepted_run(run_dir: Path, strict_collection: bool = True) -> tupl
                 raise ValueError(f"run {run_dir} has a client-resource training identity mismatch")
         interval_records = read_jsonl(run_dir / "execution_intervals.jsonl")
         interval_counts = Counter(value["interval_id"] for value in interval_records)
-        intervals_by_id = {value["interval_id"]: value for value in interval_records}
+        duplicated_intervals = [interval_id for interval_id, count in interval_counts.items() if count != 1]
+        if duplicated_intervals:
+            raise ValueError(f"run {run_dir} duplicates an interval identity")
+        intervals_by_id = {}
+        for value in interval_records:
+            intervals_by_id[value["interval_id"]] = value
         row_interval_ids = {str(value["interval_id"]) for value in records}
         if len(row_interval_ids) != len(records):
             raise ValueError(f"run {run_dir} maps more than one row to a client interval")
@@ -287,9 +294,15 @@ def validate_accepted_run(run_dir: Path, strict_collection: bool = True) -> tupl
             if (
                 int(interval["execution_attempt"]) != int(row["execution_attempt"])
                 or interval["gpu_uuid"] != row["gpu_uuid"]
+                or str(identity.get("dataset")) != str(row["dataset"])
+                or str(identity.get("experiment")) != str(row["experiment"])
+                or int(identity.get("scientific_seed", -1)) != int(row["scientific_seed"])
                 or int(identity.get("communication_round", -1)) != int(row["communication_round"])
                 or int(identity.get("selected_position", -1)) != int(row["selected_position"])
                 or str(identity.get("client_id")) != str(row["client_id"])
+                or int(identity.get("training_seed", -1)) != int(row["training_seed"])
+                or int(identity.get("execution_attempt", -1)) != int(row["execution_attempt"])
+                or str(identity.get("gpu_uuid")) != str(row["gpu_uuid"])
             ):
                 raise ValueError(f"run {run_dir} has an incompatible interval identity")
     input_hashes = {name: _file_hash(run_dir / name) for name in sorted(required)}

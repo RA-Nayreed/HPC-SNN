@@ -1,6 +1,7 @@
 import json
 from types import SimpleNamespace
 
+import pytest
 import torch
 from torch import nn
 
@@ -60,3 +61,15 @@ def test_runtime_keeps_injectable_adapter_path(tmp_path, monkeypatch):
     session = _session(tmp_path, monkeypatch, adapter)
     assert isinstance(session.sampler, PowerSampler)
     assert session.sampler.adapter is adapter
+
+
+def test_runtime_rejects_duplicate_interval_identity_before_lookup(tmp_path):
+    session = runtime.ResourceMeasurementSession.__new__(runtime.ResourceMeasurementSession)
+    session.run_dir = tmp_path
+    interval = {"interval_id": "attempt-1-client-1"}
+    (tmp_path / "execution_intervals.jsonl").write_text(
+        json.dumps(interval) + "\n" + json.dumps(interval) + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="missing or duplicated"):
+        session._finalize(True, None)

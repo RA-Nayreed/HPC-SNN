@@ -23,12 +23,26 @@ def test_client_identity_uniqueness_nonoverlap_and_resumed_attempt(tmp_path):
     recorder = IntervalRecorder(tmp_path / "intervals.jsonl")
     first = recorder.record_client(_identity(), 0, 10_000_000, 0.002, 0.003)
     assert first.residual_host_seconds == pytest.approx(0.005)
+    assert first.interval_id == "attempt-1-client-1"
+    assert "source_rank" not in first.record()
+    assert "schema_version" not in first.record()
     with pytest.raises(ValueError, match="duplicated"):
         recorder.record_client(_identity(), 10_000_000, 20_000_000, 0.002, 0.003)
     with pytest.raises(ValueError, match="overlap"):
         recorder.record_client(_identity(position=1), 9_000_000, 20_000_000, 0.002, 0.003)
     resumed = recorder.record_client(_identity(attempt=2, position=1), 20_000_000, 30_000_000, 0.002, 0.003)
     assert resumed.accepted and resumed.execution_attempt == 2
+
+
+def test_comparative_schema_two_interval_identity_is_rank_qualified(tmp_path):
+    recorder = IntervalRecorder(tmp_path / "intervals.jsonl", source_rank=3, schema_version=2)
+    value = recorder.record_client(_identity(), 0, 10_000_000, 0.002, 0.003)
+    assert value.interval_id == "attempt-1-rank-3-client-1"
+    assert value.source_rank == 3
+    assert value.schema_version == 2
+    assert json.loads((tmp_path / "intervals.jsonl").read_text())["schema_version"] == 2
+    with pytest.raises(ValueError, match="schema version 2"):
+        IntervalRecorder(tmp_path / "invalid.jsonl", source_rank=3)
 
 
 def test_timing_reconciliation_and_incomplete_interval_exclusion(tmp_path):

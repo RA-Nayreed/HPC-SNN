@@ -251,7 +251,12 @@ def merge_node_telemetry(
         raise ValueError("merged telemetry does not cover the exact global allocation")
     ordered = sorted(
         rows,
-        key=lambda row: (row.monotonic_timestamp_ns, row.gpu_uuid, row.node_identity, row.utc_timestamp),
+        key=lambda row: (
+            row.node_identity,
+            row.gpu_uuid,
+            row.monotonic_timestamp_ns,
+            row.utc_timestamp,
+        ),
     )
     atomic_write_text(
         output_path,
@@ -291,19 +296,37 @@ def integrate_physical_devices(
 ) -> dict:
     """Integrate each physical GPU independently and sum only validated device totals."""
 
+    normalized_intervals: dict[str, tuple[int, int]] = {}
+    for declared_uuid, interval in intervals_by_uuid.items():
+        gpu_uuid = canonical_gpu_uuid(declared_uuid)
+        if gpu_uuid in normalized_intervals:
+            raise ValueError("energy intervals duplicate a canonical physical GPU UUID")
+        normalized_intervals[gpu_uuid] = (int(interval[0]), int(interval[1]))
+    normalized_baselines: dict[str, float] = {}
+    for declared_uuid, baseline in idle_baseline_watts_by_uuid.items():
+        gpu_uuid = canonical_gpu_uuid(declared_uuid)
+        if gpu_uuid in normalized_baselines:
+            raise ValueError("idle baselines duplicate a canonical physical GPU UUID")
+        normalized_baselines[gpu_uuid] = float(baseline)
     observed = {row.gpu_uuid for row in samples}
-    interval_uuids = {canonical_gpu_uuid(value) for value in intervals_by_uuid}
-    baseline_uuids = {canonical_gpu_uuid(value) for value in idle_baseline_watts_by_uuid}
-    if observed != interval_uuids or observed != baseline_uuids:
+    if observed != set(normalized_intervals) or observed != set(normalized_baselines):
         raise ValueError("energy inputs must cover the exact same physical GPU UUID set")
+    if len({row.execution_attempt for row in samples}) != 1:
+        raise ValueError("energy integration cannot mix execution attempts")
+    if len({row.slurm_allocation_identity for row in samples}) != 1:
+        raise ValueError("energy integration cannot mix Slurm allocations")
+    for gpu_uuid in observed:
+        device_samples = [row for row in samples if row.gpu_uuid == gpu_uuid]
+        if len({row.node_identity for row in device_samples}) != 1:
+            raise ValueError("one physical GPU cannot span node clock domains")
     estimates: dict[str, EnergyEstimate] = {}
     for gpu_uuid in sorted(observed):
-        start_ns, end_ns = intervals_by_uuid[gpu_uuid]
+        start_ns, end_ns = normalized_intervals[gpu_uuid]
         estimates[gpu_uuid] = integrate_energy(
             [row.device_sample() for row in samples if row.gpu_uuid == gpu_uuid],
-            int(start_ns),
-            int(end_ns),
-            float(idle_baseline_watts_by_uuid[gpu_uuid]),
+            start_ns,
+            end_ns,
+            normalized_baselines[gpu_uuid],
             configured_interval_ms=100,
             maximum_gap_multiplier=maximum_gap_ms / 100,
         )

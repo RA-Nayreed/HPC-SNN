@@ -699,6 +699,7 @@ def test_session_abort_flushes_recoverable_failure_evidence(tmp_path: Path) -> N
     session.interval_path = session.attempt_dir / "rank_0" / "execution_intervals.jsonl"
     session.interval_path.parent.mkdir(parents=True)
     interval = {
+        "schema_version": 2,
         "category": "complete_treatment",
         "start_ns": 10,
         "end_ns": 20,
@@ -742,7 +743,7 @@ def test_signal_abort_unwinds_scopes_and_stops_sampler_child(tmp_path: Path, sig
     session.attempt_dir = tmp_path / "measurement_attempts" / "attempt_1"
     session.interval_path = session.attempt_dir / "rank_0" / "execution_intervals.jsonl"
     session.interval_path.parent.mkdir(parents=True)
-    session.intervals = IntervalRecorder(session.interval_path)
+    session.intervals = IntervalRecorder(session.interval_path, source_rank=0, schema_version=2)
     session.context = SimpleNamespace(
         rank=0,
         node_rank=0,
@@ -781,12 +782,19 @@ def test_interrupted_attempt_recovery_is_attempt_local_and_restores_state(tmp_pa
     interrupted = attempts / "attempt_1"
     interrupted.mkdir(parents=True)
     complete_interval = {
+        "schema_version": 2,
         "category": "complete_treatment",
         "start_ns": 10,
         "end_ns": 20,
         "accepted": False,
     }
     failure = {
+        "schema_version": 2,
+        "input_schema_versions": {
+            "execution_intervals": 2,
+            "client_resource_records": 2,
+            "node_telemetry": 1,
+        },
         "execution_attempt": 1,
         "rank": 0,
         "node_rank": 0,
@@ -801,6 +809,7 @@ def test_interrupted_attempt_recovery_is_attempt_local_and_restores_state(tmp_pa
             "idle_before": {"start_ns": 0, "end_ns": 9},
         },
         "complete_treatment_interval": complete_interval,
+        "official_test_access_count": 0,
     }
     (interrupted / "rank_0_failure.json").write_text(json.dumps(failure), encoding="utf-8")
     session = ComparativeMeasurementSession.__new__(ComparativeMeasurementSession)

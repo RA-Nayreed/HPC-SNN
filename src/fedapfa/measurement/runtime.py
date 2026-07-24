@@ -503,7 +503,12 @@ class ResourceMeasurementSession:
 
     def _finalize(self, execution_completed: bool, idle_error: str | None) -> dict:
         findings = [] if idle_error is None else [f"idle_after_failed: {idle_error}"]
-        intervals = {value["interval_id"]: value for value in read_jsonl(self.run_dir / "execution_intervals.jsonl")}
+        intervals = {}
+        for value in read_jsonl(self.run_dir / "execution_intervals.jsonl"):
+            interval_id = value.get("interval_id")
+            if not isinstance(interval_id, str) or not interval_id or interval_id in intervals:
+                raise ValueError("single-rank interval identity is missing or duplicated")
+            intervals[interval_id] = value
         samples = _device_samples(self.run_dir / "device_samples.jsonl")
         baseline_by_attempt = {
             int(value["execution_attempt"]): float(value["combined_median_power_watts"])
@@ -515,8 +520,52 @@ class ResourceMeasurementSession:
             (int(value["round_number"]), int(value["selected_position"]), str(value["client_id"]))
             for value in scientific_records
         }
+        if len(completed_keys) != len(scientific_records):
+            raise ValueError("scientific client identity is duplicated")
         provisional = read_jsonl(self.run_dir / "client_resource_records.jsonl")
-        by_interval = {value["interval_id"]: value for value in provisional}
+        by_interval = {}
+        integer_identity_fields = {
+            "scientific_seed",
+            "communication_round",
+            "selected_position",
+            "training_seed",
+            "execution_attempt",
+        }
+        identity_fields = (
+            "dataset",
+            "experiment",
+            "scientific_seed",
+            "communication_round",
+            "selected_position",
+            "client_id",
+            "training_seed",
+            "execution_attempt",
+            "gpu_uuid",
+        )
+        for value in provisional:
+            interval_id = value.get("interval_id")
+            if not isinstance(interval_id, str) or interval_id in by_interval:
+                raise ValueError("single-rank client resource interval is missing or duplicated")
+            interval = intervals.get(interval_id)
+            if (
+                interval is None
+                or interval.get("category") != "client_training"
+                or interval.get("accepted") is not True
+                or int(interval.get("execution_attempt", -1)) != int(value["execution_attempt"])
+                or str(interval.get("gpu_uuid")) != str(value["gpu_uuid"])
+            ):
+                raise ValueError("single-rank client interval relationship is incompatible")
+            identity = interval.get("identity")
+            if not isinstance(identity, dict):
+                raise ValueError("single-rank client interval identity is missing")
+            for field in identity_fields:
+                if field not in identity or field not in value:
+                    raise ValueError(f"single-rank client identity field is missing: {field}")
+                expected = int(value[field]) if field in integer_identity_fields else str(value[field])
+                observed = int(identity[field]) if field in integer_identity_fields else str(identity[field])
+                if expected != observed:
+                    raise ValueError(f"single-rank client identity differs for {field}")
+            by_interval[interval_id] = value
         candidate_rows = []
         for value in by_interval.values():
             key = (
@@ -532,8 +581,13 @@ class ResourceMeasurementSession:
                 continue
             candidate_rows.append(value)
         latest = {}
+        attempt_keys = set()
         for value in candidate_rows:
             key = resource_row_key(value)
+            attempt_key = (*key, int(value["execution_attempt"]))
+            if attempt_key in attempt_keys:
+                raise ValueError("one attempt duplicates a client resource identity")
+            attempt_keys.add(attempt_key)
             if key not in latest or int(value["execution_attempt"]) > int(latest[key]["execution_attempt"]):
                 latest[key] = value
         accepted_rows = []

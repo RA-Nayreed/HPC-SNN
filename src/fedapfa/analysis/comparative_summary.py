@@ -6,6 +6,7 @@ import csv
 import hashlib
 import json
 import math
+import re
 import statistics
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -20,6 +21,7 @@ from fedapfa.configuration import (
     load_comparative_evaluation_manifest,
 )
 from fedapfa.configuration.experiment_id import experiment_id
+from fedapfa.distributed.process_context import canonical_gpu_uuid
 from fedapfa.federated.numerical_equivalence import classify_model_states, prediction_identity
 from fedapfa.measurement.records import read_jsonl
 from fedapfa.utilities.serialization import atomic_write_json, atomic_write_text
@@ -424,7 +426,21 @@ def _run_record(task, runs_root: Path, allocation_lookup: Mapping[tuple[str, int
     official = values["official"]
     if not final.get("completed") or not values["acceptance"].get("completed"):
         raise ValueError(f"{task.experiment} seed {task.seed} execution is incomplete")
-    if not measurement.get("accepted") or not energy.get("execution_completed"):
+    expected_input_schemas = {
+        "execution_intervals": 2,
+        "client_resource_records": 2,
+        "node_telemetry": 1,
+    }
+    if (
+        not measurement.get("accepted")
+        or not energy.get("execution_completed")
+        or not energy.get("accepted")
+        or type(energy.get("schema_version")) is not int
+        or energy["schema_version"] != 2
+        or type(energy.get("input_attempt_summary_schema_version")) is not int
+        or energy["input_attempt_summary_schema_version"] != 2
+        or energy.get("input_schema_versions") != expected_input_schemas
+    ):
         raise ValueError(f"{task.experiment} seed {task.seed} energy evidence is incomplete")
     if official.get("access_count") != 1 or not official.get("evaluation_completed"):
         raise ValueError(f"{task.experiment} seed {task.seed} official-test evidence is invalid")
@@ -437,6 +453,58 @@ def _run_record(task, runs_root: Path, allocation_lookup: Mapping[tuple[str, int
     resource_rows = read_jsonl(run_dir / "client_resource_records.jsonl")
     if len(rounds) != 100 or len(clients) != 1000 or len(resource_rows) != 1000:
         raise ValueError(f"{task.experiment} seed {task.seed} record counts are incomplete")
+    process_by_rank = {}
+    process_uuids = set()
+    for value in final["parallel_execution"]["process_mapping"]:
+        rank = int(value["rank"])
+        gpu_uuid = canonical_gpu_uuid(value["gpu_uuid"])
+        if rank in process_by_rank:
+            raise ValueError(f"{task.experiment} seed {task.seed} duplicates a process-rank mapping")
+        if gpu_uuid in process_uuids or value["gpu_uuid"] != gpu_uuid or int(value["node_rank"]) < 0:
+            raise ValueError(f"{task.experiment} seed {task.seed} process device provenance is invalid")
+        process_uuids.add(gpu_uuid)
+        process_by_rank[rank] = value
+    if set(process_by_rank) != set(range(int(config["parallel_execution"]["process_count"]))):
+        raise ValueError(f"{task.experiment} seed {task.seed} process-rank coverage is incomplete")
+    scientific_by_key = {}
+    for value in clients:
+        key = (int(value["round_number"]), int(value["selected_position"]))
+        if key in scientific_by_key:
+            raise ValueError(f"{task.experiment} seed {task.seed} duplicates a scientific client identity")
+        scientific_by_key[key] = value
+    qualified_intervals = set()
+    for value in resource_rows:
+        rank = int(value.get("process_rank", -1))
+        process = process_by_rank.get(rank)
+        attempt = int(value.get("execution_attempt", -1))
+        interval_id = value.get("interval_id")
+        qualified = (attempt, rank, interval_id)
+        if (
+            type(value.get("schema_version")) is not int
+            or value["schema_version"] != 2
+            or process is None
+            or value.get("interval_source_rank") != rank
+            or int(value.get("node_rank", -1)) != int(process["node_rank"])
+            or int(value.get("interval_source_node_rank", -1)) != int(process["node_rank"])
+            or canonical_gpu_uuid(value["gpu_uuid"]) != canonical_gpu_uuid(process["gpu_uuid"])
+            or not isinstance(interval_id, str)
+            or re.fullmatch(rf"attempt-{attempt}-rank-{rank}-client-[1-9][0-9]*", interval_id) is None
+            or qualified in qualified_intervals
+        ):
+            raise ValueError(f"{task.experiment} seed {task.seed} client interval provenance is invalid")
+        qualified_intervals.add(qualified)
+        scientific = scientific_by_key.get(
+            (int(value["communication_round"]), int(value["selected_position"]))
+        )
+        if (
+            scientific is None
+            or str(value["client_id"]) != str(scientific["client_id"])
+            or int(value["training_seed"]) != int(scientific["resolved_training_seed"])
+            or rank != int(scientific["process_rank"])
+            or str(value["dataset"]) != str(task.dataset)
+            or int(value["scientific_seed"]) != int(task.seed)
+        ):
+            raise ValueError(f"{task.experiment} seed {task.seed} client scientific identity is invalid")
     partition_clients = values["partition"]["clients"]
     populations = [float(value["example_count"]) for value in partition_clients]
     event_totals = defaultdict(float)
