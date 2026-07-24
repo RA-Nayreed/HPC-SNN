@@ -3,6 +3,7 @@ import json
 import os
 import socket
 import time
+from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -289,6 +290,55 @@ def _model():
         return IntegrationFederatedModel()
     finally:
         torch.set_rng_state(state)
+
+
+class RecordingMeasurementSession:
+    """Rank-local strict-LIFO recorder around the real distributed training loop."""
+
+    def __init__(self, fail_inside_round=False):
+        self.fail_inside_round = fail_inside_round
+        self.events = []
+        self._open_scopes = []
+        self._sequence = 0
+
+    def start(self):
+        self.events.append({"event": "start"})
+
+    def begin(self, category, identity=None):
+        self._sequence += 1
+        token = f"{category}-{self._sequence}"
+        self._open_scopes.append((token, category, identity))
+        self.events.append({"event": "begin", "category": category, "identity": identity})
+        return token
+
+    def end(self, token):
+        if not self._open_scopes or self._open_scopes[-1][0] != token:
+            raise RuntimeError("measurement interval nesting is incompatible")
+        _, category, identity = self._open_scopes.pop()
+        self.events.append({"event": "end", "category": category, "identity": identity})
+
+    def measure(self, _category, _identity=None):
+        return nullcontext()
+
+    def prepare_selected_clients(self, _selected, _round_number):
+        if self.fail_inside_round:
+            raise RuntimeError("injected failure inside communication round")
+
+    def abort(self, _error):
+        while self._open_scopes:
+            _, category, identity = self._open_scopes.pop()
+            self.events.append({"event": "abort", "category": category, "identity": identity})
+        self.events.append({"event": "abort_complete"})
+
+    def stop(self, execution_completed):
+        if self._open_scopes:
+            raise RuntimeError("measurement finalization retained open intervals")
+        self.events.append({"event": "finalize", "execution_completed": execution_completed})
+        return {"accepted": execution_completed}
+
+    @property
+    def open_categories(self):
+        return [category for _, category, _ in self._open_scopes]
 
 
 def _worker(
@@ -646,6 +696,206 @@ def _execute(
         all(value.is_set() for value in start_events),
         scheduler_ready.is_set(),
     )
+
+
+def _measurement_lifecycle_worker(rank, world_size, port, output_root, mode, result_queue):
+    os.environ.update(
+        {
+            "RANK": str(rank),
+            "LOCAL_RANK": str(rank),
+            "WORLD_SIZE": str(world_size),
+            "LOCAL_WORLD_SIZE": str(world_size),
+            "MASTER_ADDR": "127.0.0.1",
+            "MASTER_PORT": str(port),
+        }
+    )
+    config = _config(output_root, world_size)
+    config["name"] = f"measurement_lifecycle_{mode}_{world_size}_ranks"
+    config["federated"]["rounds"] = 3
+    context = initialize_process_context(config["parallel_execution"], allow_gloo=True)
+    session = RecordingMeasurementSession(fail_inside_round=mode == "failure")
+    original_atomic_write_json = distributed_training.atomic_write_json
+    coordinator_artifact_names = {
+        "acceptance.json",
+        "execution_measurements.json",
+        "final_metrics.json",
+        "official_test_metrics.json",
+    }
+    coordinator_artifact_writes = []
+
+    def tracking_atomic_write_json(path, value):
+        if Path(path).name in coordinator_artifact_names:
+            coordinator_artifact_writes.append(Path(path).name)
+        return original_atomic_write_json(path, value)
+
+    distributed_training.atomic_write_json = tracking_atomic_write_json
+    result = None
+    error_type = None
+    error_message = None
+    bundle = None
+    try:
+        resident_memory_before_workload = process_resident_memory_bytes()
+        bundle = IntegrationBundle(config, context.is_coordinator)
+        model = _model()
+        run_dir = run_directory(config)
+        if context.is_coordinator:
+            initialize_run(
+                config,
+                {"train": bundle.train_indices.tolist(), "validation": bundle.validation_indices.tolist()},
+                "measurement lifecycle Gloo execution",
+            )
+        dist.barrier()
+        identity = {
+            "configuration_id": configuration_identity(config),
+            "split_id": bundle.split_artifact["split_id"],
+            "partition_id": bundle.partition.partition_id,
+            "model_initialization_id": state_identity(model.state_dict()),
+            "resolved_seeds": bundle.resolved_seed_values,
+            "world_size": world_size,
+        }
+        process_records = verify_identity_consensus(
+            context,
+            identity,
+            process_resident_memory_before_workload_bytes=resident_memory_before_workload,
+        )
+        session.start()
+        treatment_token = session.begin("complete_treatment")
+        try:
+            result = train_distributed_federated(
+                model,
+                bundle,
+                config,
+                run_dir,
+                context,
+                process_records,
+                stop_after_round=2 if mode == "stop" else None,
+                measurement_session=session,
+            )
+            session.end(treatment_token)
+            session.stop(bool(result and result.get("completed")))
+        except BaseException as error:
+            error_type = type(error).__name__
+            error_message = str(error)
+            session.abort(error)
+    finally:
+        distributed_training.atomic_write_json = original_atomic_write_json
+        process_group_initialized_before_close = dist.is_initialized()
+        close_process_context()
+    result_queue.put(
+        {
+            "rank": rank,
+            "events": session.events,
+            "open_categories": session.open_categories,
+            "result_completed": None if result is None else result.get("completed"),
+            "result_completed_rounds": None if result is None else result.get("completed_rounds"),
+            "error_type": error_type,
+            "error_message": error_message,
+            "official_test_accesses": bundle.official_test_access_count,
+            "coordinator_artifact_writes": coordinator_artifact_writes,
+            "process_group_initialized_before_close": process_group_initialized_before_close,
+            "process_group_initialized_after_close": dist.is_initialized(),
+        }
+    )
+
+
+def _execute_measurement_lifecycle(output_root, world_size, mode="normal"):
+    context = mp.get_context("spawn")
+    result_queue = context.SimpleQueue()
+    mp.spawn(
+        _measurement_lifecycle_worker,
+        args=(world_size, _available_port(), str(output_root), mode, result_queue),
+        nprocs=world_size,
+        join=True,
+    )
+    return sorted((result_queue.get() for _ in range(world_size)), key=lambda value: value["rank"])
+
+
+def _scope_events(record):
+    return [
+        (value["event"], value.get("category"), (value.get("identity") or {}).get("round_number"))
+        for value in record["events"]
+        if value["event"] in {"begin", "end", "abort"}
+    ]
+
+
+def _expected_completed_scope_events(rounds):
+    events = [("begin", "complete_treatment", None)]
+    for round_number in rounds:
+        events.extend(
+            (
+                ("begin", "communication_round", round_number),
+                ("end", "communication_round", round_number),
+            )
+        )
+    events.append(("end", "complete_treatment", None))
+    return events
+
+
+def test_measurement_lifecycle_two_rank_gloo_closes_every_round_on_every_rank(tmp_path):
+    records = _execute_measurement_lifecycle(tmp_path / "two_rank_normal", 2)
+    expected = _expected_completed_scope_events(range(1, 4))
+    assert [value["rank"] for value in records] == [0, 1]
+    for record in records:
+        assert record["error_type"] is None
+        assert _scope_events(record) == expected
+        assert record["open_categories"] == []
+        assert sum(value["event"] == "finalize" for value in record["events"]) == 1
+        assert record["process_group_initialized_before_close"]
+        assert not record["process_group_initialized_after_close"]
+    assert records[0]["result_completed"] is True
+    assert records[1]["result_completed"] is None
+    assert [value["official_test_accesses"] for value in records] == [1, 0]
+    assert set(records[0]["coordinator_artifact_writes"]) == {
+        "acceptance.json",
+        "execution_measurements.json",
+        "final_metrics.json",
+        "official_test_metrics.json",
+    }
+    assert records[1]["coordinator_artifact_writes"] == []
+
+
+def test_measurement_lifecycle_stop_after_round_finalizes_incomplete_attempt_on_all_ranks(tmp_path):
+    records = _execute_measurement_lifecycle(tmp_path / "two_rank_stop", 2, "stop")
+    expected = _expected_completed_scope_events(range(1, 3))
+    for record in records:
+        assert record["error_type"] is None
+        assert _scope_events(record) == expected
+        assert record["open_categories"] == []
+        finalization = [value for value in record["events"] if value["event"] == "finalize"]
+        assert finalization == [{"event": "finalize", "execution_completed": False}]
+        assert record["official_test_accesses"] == 0
+        assert not record["process_group_initialized_after_close"]
+    assert records[0]["result_completed"] is False
+    assert records[0]["result_completed_rounds"] == 2
+    assert records[1]["result_completed"] is None
+
+
+def test_measurement_lifecycle_failure_aborts_round_then_treatment_without_masking(tmp_path):
+    records = _execute_measurement_lifecycle(tmp_path / "two_rank_failure", 2, "failure")
+    expected = [
+        ("begin", "complete_treatment", None),
+        ("begin", "communication_round", 1),
+        ("abort", "communication_round", 1),
+        ("abort", "complete_treatment", None),
+    ]
+    for record in records:
+        assert record["error_type"] == "RuntimeError"
+        assert record["error_message"] == "injected failure inside communication round"
+        assert _scope_events(record) == expected
+        assert record["open_categories"] == []
+        assert sum(value["event"] == "abort_complete" for value in record["events"]) == 1
+        assert all(value["event"] != "finalize" for value in record["events"])
+        assert record["official_test_accesses"] == 0
+        assert not record["process_group_initialized_after_close"]
+
+
+def test_measurement_lifecycle_one_rank_order_remains_compatible(tmp_path):
+    records = _execute_measurement_lifecycle(tmp_path / "one_rank_normal", 1)
+    assert len(records) == 1
+    assert records[0]["error_type"] is None
+    assert _scope_events(records[0]) == _expected_completed_scope_events(range(1, 4))
+    assert records[0]["open_categories"] == []
+    assert records[0]["official_test_accesses"] == 1
 
 
 def test_one_and_two_process_gloo_execution_are_numerically_equivalent(tmp_path):

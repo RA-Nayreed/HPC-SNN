@@ -1171,8 +1171,11 @@ def train_distributed_federated(
             measurements["rounds"].append(measurement)
             measurements["rounds"].sort(key=lambda value: value["round_number"])
             atomic_write_json(path / "execution_measurements.json", measurements)
-            if measurement_session is not None:
-                measurement_session.end(round_measurement)
+
+        if measurement_session is not None:
+            measurement_session.end(round_measurement)
+
+        if context.is_coordinator:
             if validation is None:
                 logger.info(
                     "round=%d selected=%s validation=unavailable process_count=%d",

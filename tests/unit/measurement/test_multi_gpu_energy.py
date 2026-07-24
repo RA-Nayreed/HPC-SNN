@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import multiprocessing
+import signal
 from dataclasses import replace
 from pathlib import Path
 from types import SimpleNamespace
@@ -11,6 +12,7 @@ import pytest
 import torch
 
 from fedapfa.measurement import comparative_runtime
+from fedapfa.measurement.client_interval import IntervalRecorder
 from fedapfa.measurement.comparative_runtime import ComparativeMeasurementSession
 from fedapfa.measurement.multi_gpu_energy import (
     NodeNvmlProcessSampler,
@@ -333,6 +335,36 @@ def test_interrupted_client_interval_is_not_an_accepted_overlap() -> None:
     }
     accepted = {**interrupted, "accepted": True, "start_ns": 5, "end_ns": 10}
     validate_client_interval_nonoverlap([interrupted, accepted])
+
+
+def test_comparative_session_strict_lifo_guard_and_reverse_abort_are_retained(tmp_path: Path) -> None:
+    session = ComparativeMeasurementSession.__new__(ComparativeMeasurementSession)
+    session._started = True
+    session._open_scopes = []
+    session.execution_attempt = 1
+    session.gpu_uuid = UUIDS[0]
+    interval_path = tmp_path / "execution_intervals.jsonl"
+    session.intervals = IntervalRecorder(interval_path)
+
+    treatment_token = session.begin("complete_treatment")
+    round_token = session.begin("communication_round", {"round_number": 1})
+
+    with pytest.raises(RuntimeError, match="measurement interval nesting is incompatible"):
+        session.end(treatment_token)
+    assert [token for _, token in session._open_scopes] == [treatment_token, round_token]
+
+    session._abort_scopes()
+
+    records = [json.loads(line) for line in interval_path.read_text(encoding="utf-8").splitlines()]
+    assert [value["category"] for value in records] == [
+        "communication_round",
+        "complete_treatment",
+    ]
+    assert all(value["accepted"] is False for value in records)
+    assert all(value["exclusion_reason"] == "RuntimeError" for value in records)
+    assert session._open_scopes == []
+    with pytest.raises(RuntimeError, match="measurement interval nesting is incompatible"):
+        session.end(round_token)
 
 
 def _calibration_requirements() -> dict:
@@ -699,6 +731,48 @@ def test_session_abort_flushes_recoverable_failure_evidence(tmp_path: Path) -> N
     assert evidence["idle_record"] == session.idle_record
     assert evidence["complete_treatment_interval"] == interval
     assert evidence["sampler_shutdown_error"] is None
+    assert not session._started
+
+
+@pytest.mark.parametrize("signum", [signal.SIGTERM, signal.SIGINT])
+def test_signal_abort_unwinds_scopes_and_stops_sampler_child(tmp_path: Path, signum: signal.Signals) -> None:
+    session = ComparativeMeasurementSession.__new__(ComparativeMeasurementSession)
+    session._started = True
+    session._open_scopes = []
+    session.attempt_dir = tmp_path / "measurement_attempts" / "attempt_1"
+    session.interval_path = session.attempt_dir / "rank_0" / "execution_intervals.jsonl"
+    session.interval_path.parent.mkdir(parents=True)
+    session.intervals = IntervalRecorder(session.interval_path)
+    session.context = SimpleNamespace(
+        rank=0,
+        node_rank=0,
+        local_rank=0,
+        world_size=1,
+        host="node-a",
+    )
+    session.execution_attempt = 1
+    session.gpu_uuid = UUIDS[0]
+    session.allocation_identity = "100_0:101"
+    session.idle_record = {
+        "node_rank": 0,
+        "node_identity": "node-a",
+        "idle_before": {"start_ns": 0, "end_ns": 1},
+    }
+    sampler = _AbortSampler()
+    session.node_sampler = sampler
+    session.begin("complete_treatment")
+    session.begin("communication_round", {"round_number": 1})
+
+    session.abort(SystemExit(128 + signum))
+
+    intervals = [json.loads(line) for line in session.interval_path.read_text(encoding="utf-8").splitlines()]
+    evidence = json.loads((session.attempt_dir / "rank_0_failure.json").read_text(encoding="utf-8"))
+    assert [value["category"] for value in intervals] == ["communication_round", "complete_treatment"]
+    assert all(value["accepted"] is False for value in intervals)
+    assert session._open_scopes == []
+    assert sampler.stopped and not sampler.aborted
+    assert evidence["error_type"] == "SystemExit"
+    assert evidence["error_message"] == str(128 + signum)
     assert not session._started
 
 

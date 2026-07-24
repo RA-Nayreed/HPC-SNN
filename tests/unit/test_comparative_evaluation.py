@@ -357,15 +357,185 @@ def test_comparative_slurm_launchers_encode_required_policy() -> None:
     calibration = (ROOT / "scripts/slurm/comparative_measurement_calibration.sbatch").read_text(encoding="utf-8")
     for text in (scaling, non_iid):
         assert "gpumedium" in text
+        assert "set -euo pipefail" in text
         assert '"${python_bin}" -m torch.distributed.run' in text
+        assert "--kill-on-bad-exit=1" in text
         assert "TORCH_NCCL_ASYNC_ERROR_HANDLING=1" in text
         assert "export NCCL_ASYNC_ERROR_HANDLING" not in text
         assert "mpirun" not in text and "mpiexec" not in text
         assert "CUDA_MPS_ACTIVE_THREAD_PERCENTAGE=" not in text
+        assert "|| true" not in text
     assert "--rdzv-backend=c10d" in scaling
     assert "--nnodes=2 --nproc-per-node=2" in scaling
+    non_iid_launch = non_iid.index('srun --nodes=1 --ntasks=1 --ntasks-per-node=1 --kill-on-bad-exit=1')
+    non_iid_treatment_end = non_iid.index("record_comparative_allocation_timing end-treatment")
+    non_iid_allocation_complete = non_iid.index("record_comparative_allocation_timing complete")
+    assert non_iid_launch < non_iid_treatment_end < non_iid_allocation_complete
     assert "217086M 434172M 868344M 434172M" in wrapper
     assert "%1" not in wrapper
     assert "calibrate_comparative_measurement" in calibration
     assert "--rdzv-backend=c10d" in calibration
     assert "gpumedium" in calibration
+
+
+def _fake_comparative_batch_environment(tmp_path: Path, *, visible_devices: int):
+    command_dir = tmp_path / "commands"
+    command_dir.mkdir()
+    _write_command(command_dir / "module", "#!/usr/bin/env bash\nexit 0\n")
+    _write_command(
+        command_dir / "nvidia-smi",
+        "#!/usr/bin/env bash\nset -euo pipefail\nprintf '%b\\n' \"${FAKE_RAW_UUID_LINES}\"\n",
+    )
+    _write_command(
+        command_dir / "scontrol",
+        "#!/usr/bin/env bash\nset -euo pipefail\nprintf 'node-a\\n'\n",
+    )
+    _write_command(
+        command_dir / "srun",
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\t%s\n' "${FEDAPFA_TREATMENT_POSITION:-preflight}" "$*" >> "${SRUN_INVOCATION_RECORD}"
+if [[ "$*" == *"torch.distributed.run"* ]]; then
+    if [[ "${SRUN_FAIL_POSITION}" == "all" || "${FEDAPFA_TREATMENT_POSITION:-}" == "${SRUN_FAIL_POSITION}" ]]; then
+        exit 41
+    fi
+    exit 0
+fi
+while (($#)) && [[ "$1" == --* ]]; do
+    shift
+done
+export SLURM_PROCID="${SLURM_PROCID:-0}"
+exec "$@"
+""",
+    )
+    venv = tmp_path / "venv"
+    (venv / "bin").mkdir(parents=True)
+    _write_command(
+        venv / "bin" / "python3",
+        r"""#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+    *"record_comparative_allocation_timing"*) printf '%s\n' "$3" >> "${TIMING_ACTION_RECORD}" ;;
+    *"scientific_manifest allocation-task"*) printf '%s\n' "${FAKE_ALLOCATION_TASK}" ;;
+    *"scientific_manifest validate"*) exit 0 ;;
+    *"allocated_gpu_uuids"*) printf '%s\n' "${FAKE_CANONICAL_UUIDS}" ;;
+    *"torch.cuda.device_count"*) printf '%s\n' "${FAKE_VISIBLE_DEVICE_COUNT}" ;;
+    -c*) exit 0 ;;
+    *) exit 2 ;;
+esac
+""",
+    )
+    work_dir = tmp_path / "work"
+    data_root = work_dir / "data" / "shd"
+    data_root.mkdir(parents=True)
+    (data_root / "shd_train.h5").touch()
+    (data_root / "shd_test.h5").touch()
+    job_tmp = tmp_path / "job-tmp"
+    job_tmp.mkdir()
+    timing_record = tmp_path / "timing-actions.txt"
+    srun_record = tmp_path / "srun-invocations.txt"
+    uuids = [f"GPU-{index}" for index in range(visible_devices)]
+    environment = {
+        **os.environ,
+        "PATH": f"{command_dir}:{os.environ['PATH']}",
+        "CSC_PROJECT": "project_2001234",
+        "USER": "scientist",
+        "FEDAPFA_VENV": str(venv),
+        "WORK_DIR": str(work_dir),
+        "REPO_ROOT": str(ROOT),
+        "EVALUATION_MANIFEST": str(SCALING),
+        "SLURM_ARRAY_JOB_ID": "900",
+        "SLURM_JOB_ID": "901",
+        "SLURM_JOB_NUM_NODES": "1",
+        "SLURM_NTASKS": "1",
+        "SLURM_JOB_NODELIST": "node-a",
+        "TMPDIR": str(job_tmp),
+        "FAKE_VISIBLE_DEVICE_COUNT": str(visible_devices),
+        "FAKE_RAW_UUID_LINES": "\n".join(uuids),
+        "FAKE_CANONICAL_UUIDS": ",".join(value.removeprefix("GPU-") for value in uuids),
+        "TIMING_ACTION_RECORD": str(timing_record),
+        "SRUN_INVOCATION_RECORD": str(srun_record),
+    }
+    return environment, work_dir, timing_record, srun_record
+
+
+def test_scaling_batch_propagates_failed_srun_and_cannot_report_success(tmp_path: Path) -> None:
+    environment, work_dir, timing_record, srun_record = _fake_comparative_batch_environment(
+        tmp_path, visible_devices=1
+    )
+    calibration = (
+        work_dir
+        / "calibration/system_scaling_energy_evaluation/one_node_one_gpu/instrumentation_calibration.json"
+    )
+    calibration.parent.mkdir(parents=True)
+    calibration.write_text("{}", encoding="utf-8")
+    environment.update(
+        {
+            "SLURM_ARRAY_TASK_ID": "0",
+            "SCALING_TOPOLOGY": "one_node_one_gpu",
+            "SCALING_ALLOCATION_INDICES": "0:1:2:12:13:14",
+            "FAKE_ALLOCATION_TASK": "0\tshd\t37\tone_node_one_gpu\tconfig.yaml",
+            "SRUN_FAIL_POSITION": "all",
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(SCALING_BATCH)],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+
+    assert result.returncode == 41
+    assert timing_record.read_text(encoding="utf-8").splitlines() == ["start", "begin-treatment"]
+    assert "torch.distributed.run" in srun_record.read_text(encoding="utf-8")
+
+
+def test_non_iid_batch_stops_at_first_unrecoverable_treatment_failure(tmp_path: Path) -> None:
+    environment, work_dir, timing_record, srun_record = _fake_comparative_batch_environment(
+        tmp_path, visible_devices=4
+    )
+    calibration = (
+        work_dir
+        / "calibration/system_scaling_energy_evaluation/one_node_four_gpu/instrumentation_calibration.json"
+    )
+    calibration.parent.mkdir(parents=True)
+    calibration.write_text("{}", encoding="utf-8")
+    environment.update(
+        {
+            "EVALUATION_MANIFEST": str(NON_IID),
+            "SLURM_ARRAY_TASK_ID": "0",
+            "FAKE_ALLOCATION_TASK": (
+                "0\tshd\t37\tiid\tiid.yaml\tdirichlet_alpha_1_0\ta1.yaml\t"
+                "dirichlet_alpha_0_5\ta05.yaml\tdirichlet_alpha_0_1\ta01.yaml"
+            ),
+            "SRUN_FAIL_POSITION": "2",
+        }
+    )
+
+    result = subprocess.run(
+        ["bash", str(ROOT / "scripts/slurm/non_iid_energy.sbatch")],
+        cwd=ROOT,
+        env=environment,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=20,
+    )
+
+    assert result.returncode == 41
+    assert timing_record.read_text(encoding="utf-8").splitlines() == [
+        "start",
+        "begin-treatment",
+        "end-treatment",
+        "begin-treatment",
+    ]
+    training_positions = [
+        line.partition("\t")[0]
+        for line in srun_record.read_text(encoding="utf-8").splitlines()
+        if "torch.distributed.run" in line
+    ]
+    assert training_positions == ["1", "2"]
